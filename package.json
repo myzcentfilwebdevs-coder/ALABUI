@@ -1,9 +1,11 @@
 {
-  "name": "temp-app",
+  "name": "alab-ui",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "local": "node scripts/run-next.mjs local",
+    "main": "node scripts/run-next.mjs main",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

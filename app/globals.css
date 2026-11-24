@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #030b24;
+  --foreground: #ffffff;
 }
 
 @theme inline {
@@ -10,17 +10,52 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-display: var(--font-barlow);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Hide browser-native password reveal button (e.g. Microsoft Edge) so only our custom toggle shows */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+/* Stadium-style hero background */
+.hero-bg {
+  background:
+    radial-gradient(circle at 6% 12%, rgba(191, 219, 254, 0.35), transparent 14%),
+    radial-gradient(circle at 94% 10%, rgba(191, 219, 254, 0.3), transparent 14%),
+    radial-gradient(ellipse 55% 50% at 50% 35%, rgba(37, 99, 235, 0.55), transparent 70%),
+    radial-gradient(ellipse 40% 45% at 0% 100%, rgba(249, 115, 22, 0.45), transparent 70%),
+    radial-gradient(ellipse 60% 30% at 55% 105%, rgba(22, 163, 74, 0.35), transparent 70%),
+    linear-gradient(180deg, #041237 0%, #06194d 55%, #031030 100%);
+}
+
+.hero-streaks {
+  background:
+    repeating-linear-gradient(115deg, transparent 0 120px, rgba(96, 165, 250, 0.1) 120px 123px, transparent 123px 260px),
+    linear-gradient(115deg, transparent 60%, rgba(37, 99, 235, 0.25) 60%, rgba(37, 99, 235, 0.25) 63%, transparent 63%);
+}
+
+/* Dark stadium dashboard theme */
+.dash-bg {
+  background:
+    radial-gradient(ellipse 45% 28% at 22% 0%, rgba(147, 197, 253, 0.28), transparent 65%),
+    radial-gradient(ellipse 45% 28% at 78% 0%, rgba(147, 197, 253, 0.24), transparent 65%),
+    radial-gradient(ellipse 55% 40% at 50% 10%, rgba(37, 99, 235, 0.35), transparent 70%),
+    radial-gradient(ellipse 30% 35% at 100% 24%, rgba(249, 115, 22, 0.32), transparent 65%),
+    radial-gradient(ellipse 28% 32% at 0% 96%, rgba(249, 115, 22, 0.24), transparent 65%),
+    linear-gradient(180deg, #040f33 0%, #05143e 45%, #030b24 100%);
+}
+
+.dash-card {
+  background: linear-gradient(180deg, rgba(9, 25, 68, 0.88) 0%, rgba(5, 16, 48, 0.92) 100%);
+  border: 1px solid rgba(96, 165, 250, 0.26);
+  box-shadow: 0 12px 32px -12px rgba(2, 8, 28, 0.85), inset 0 1px 0 rgba(191, 219, 254, 0.12);
+  backdrop-filter: blur(12px);
 }

@@ -1,7 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  allowedDevOrigins: ["192.168.1.13"],
+  async redirects() {
+    return [
+      {
+        source: "/",
+        destination: "/register",
+        permanent: false,
+      },
+    ];
+  },
   experimental: {
     agentFeedback: true,
   },
