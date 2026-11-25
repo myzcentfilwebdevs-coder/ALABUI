@@ -22,6 +22,7 @@ import {
   ReceiptIcon,
   UsersIcon,
 } from "@/components/icons";
+import CustomSelect from "@/components/ui/CustomSelect";
 
 export interface PlayerAttendanceSummaryItem {
   player_user_id: number;
@@ -70,12 +71,28 @@ function monthRangeLabel(year: number, month0: number): string {
   return `${fmt(first)} – ${fmt(last)}`;
 }
 
-function statusDotClass(status: AttendanceStatus): string {
-  if (status === "Present") return "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]";
-  if (status === "Absent") return "bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.9)]";
-  if (status === "Late") return "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)]";
-  if (status === "Excused") return "bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)]";
+function statusCalendarCellClass(status: AttendanceStatus): string {
+  if (status === "Present") {
+    return "border-emerald-400/70 bg-emerald-500/25 text-emerald-50 shadow-[inset_0_0_12px_rgba(16,185,129,0.28)] hover:bg-emerald-500/35";
+  }
+  if (status === "Absent") {
+    return "border-rose-400/70 bg-rose-500/25 text-rose-50 shadow-[inset_0_0_12px_rgba(244,63,94,0.28)] hover:bg-rose-500/35";
+  }
+  if (status === "Late") {
+    return "border-amber-400/70 bg-amber-500/25 text-amber-50 shadow-[inset_0_0_12px_rgba(245,158,11,0.25)] hover:bg-amber-500/35";
+  }
+  if (status === "Excused") {
+    return "border-sky-400/70 bg-sky-500/25 text-sky-50 shadow-[inset_0_0_12px_rgba(56,189,248,0.25)] hover:bg-sky-500/35";
+  }
   return "";
+}
+
+function statusBadgeTextClass(status: AttendanceStatus): string {
+  if (status === "Present") return "text-emerald-300";
+  if (status === "Absent") return "text-rose-300";
+  if (status === "Late") return "text-amber-300";
+  if (status === "Excused") return "text-sky-300";
+  return "text-blue-200/70";
 }
 
 function statusPillClass(status: AttendanceStatus): string {
@@ -134,11 +151,25 @@ export default function PlayerAttendanceDetail({
     setLoading(false);
     if (res.ok && res.data) {
       setHistory(res.data);
+      // If current calendar month has no records, jump to the latest recorded date's month so statuses are immediately visible
+      const recs = res.data.records;
+      if (recs.length > 0) {
+        const hasInTodayMonth = recs.some((r) => r.date.startsWith(todayISO.slice(0, 7)));
+        if (!hasInTodayMonth) {
+          const latest = recs[0].date.slice(0, 10);
+          const parts = latest.split("-").map(Number);
+          if (parts.length === 3 && !parts.some(Number.isNaN)) {
+            setCalYear(parts[0]);
+            setCalMonth0(parts[1] - 1);
+            setSelectedDate(latest);
+          }
+        }
+      }
     } else {
       setHistory(null);
       setError(res.message || "Failed to load player attendance history.");
     }
-  }, [player.player_user_id]);
+  }, [player.player_user_id, todayISO]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -203,6 +234,18 @@ export default function PlayerAttendanceDetail({
     setCalYear(d.getFullYear());
     setCalMonth0(d.getMonth());
   }
+
+  function jumpToDate(iso: string) {
+    const clean = iso.slice(0, 10);
+    setSelectedDate(clean);
+    const parts = clean.split("-").map(Number);
+    if (parts.length === 3 && !parts.some(Number.isNaN)) {
+      setCalYear(parts[0]);
+      setCalMonth0(parts[1] - 1);
+    }
+  }
+
+  const selectedRecord = recordByDate.get(selectedDate) ?? null;
 
   const summary = history?.summary ?? {
     total: 0,
@@ -307,23 +350,27 @@ export default function PlayerAttendanceDetail({
           </div>
 
           {allPlayers.length > 1 && (
-            <select
-              aria-label="Switch player"
-              value={player.player_user_id}
-              onChange={(e) => {
-                const target = allPlayers.find((p) => p.player_user_id === Number(e.target.value));
+            <CustomSelect
+              ariaLabel="Switch player"
+              size="sm"
+              value={String(player.player_user_id)}
+              onChange={(val) => {
+                const target = allPlayers.find((p) => p.player_user_id === Number(val));
                 if (target) onSelectPlayer(target);
               }}
-              className="rounded-xl border border-blue-400/30 bg-[#051238]/85 px-3 py-2 text-xs font-bold text-white focus:border-sky-400 focus:outline-none"
-            >
-              {allPlayers.map((p) => (
-                <option key={p.player_user_id} value={p.player_user_id} className="bg-[#051238]">
-                  {p.last_name && p.first_name
+              leadingIcon={<UsersIcon className="h-3.5 w-3.5" />}
+              menuMinWidth={210}
+              options={allPlayers.map((p) => ({
+                value: String(p.player_user_id),
+                label:
+                  p.last_name && p.first_name
                     ? `${p.last_name}, ${p.first_name}`
-                    : `${p.first_name} ${p.last_name}`}
-                </option>
-              ))}
-            </select>
+                    : `${p.first_name} ${p.last_name}`,
+                sublabel: [p.age_category, p.jersey_number !== null ? `#${p.jersey_number}` : ""]
+                  .filter(Boolean)
+                  .join(" • ") || undefined,
+              }))}
+            />
           )}
         </div>
       </div>
@@ -339,28 +386,28 @@ export default function PlayerAttendanceDetail({
         {/* Player Profile Card */}
         <div className="dash-card relative overflow-hidden rounded-2xl p-4 sm:p-5 xl:col-span-5">
           <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-sky-500/20 blur-2xl" />
-          <div className="relative flex items-center gap-4">
+          <div className="relative flex flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:text-left">
             {/* Avatar / Jersey Frame */}
-            <div className="relative flex h-28 w-24 shrink-0 flex-col items-center justify-center overflow-hidden rounded-2xl border border-sky-400/40 bg-gradient-to-b from-blue-600/80 via-blue-800/80 to-[#040e2d] shadow-[0_0_24px_rgba(37,99,235,0.45)]">
-              <Image src={crest} alt="ALAB" className="mb-1 h-7 w-auto opacity-90" />
-              <span className="font-display text-3xl font-extrabold italic leading-none text-white">
+            <div className="relative flex h-24 w-20 shrink-0 flex-col items-center justify-center overflow-hidden rounded-2xl border border-sky-400/40 bg-gradient-to-b from-blue-600/80 via-blue-800/80 to-[#040e2d] shadow-[0_0_24px_rgba(37,99,235,0.45)] sm:h-28 sm:w-24">
+              <Image src={crest} alt="ALAB" className="mb-1 h-6 w-auto opacity-90 sm:h-7" />
+              <span className="font-display text-2xl font-extrabold italic leading-none text-white sm:text-3xl">
                 {player.jersey_number !== null
                   ? `#${player.jersey_number}`
                   : getInitials(player.first_name, player.last_name)}
               </span>
-              <span className="mt-1 text-[10px] font-bold uppercase tracking-widest text-sky-200">
+              <span className="mt-1 text-[9px] font-bold uppercase tracking-widest text-sky-200 sm:text-[10px]">
                 ALAB FC
               </span>
             </div>
 
             {/* Player Details */}
-            <div className="min-w-0 flex-1">
-              <h3 className="truncate text-xl font-extrabold text-white">{displayName}</h3>
+            <div className="w-full min-w-0 flex-1">
+              <h3 className="truncate text-lg font-extrabold text-white sm:text-xl">{displayName}</h3>
               <span className="mt-1 inline-block rounded-full bg-gradient-to-r from-blue-600 to-sky-500 px-3 py-0.5 text-[11px] font-bold text-white shadow-[0_0_12px_rgba(56,189,248,0.45)]">
                 {player.position || "Player"}
               </span>
 
-              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-left text-xs">
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-blue-200/65">Team</p>
                   <p className="mt-0.5 flex items-center gap-1.5 font-bold text-white">
@@ -383,13 +430,19 @@ export default function PlayerAttendanceDetail({
                   <p className="mt-0.5 flex items-center gap-1.5 font-bold">
                     <span
                       className={`h-2 w-2 rounded-full ${
-                        history?.attended_today ? "bg-emerald-400" : "bg-amber-400"
+                        history?.today_status === "Present"
+                          ? "bg-emerald-400"
+                          : history?.today_status === "Absent"
+                          ? "bg-rose-400"
+                          : history?.today_status === "Late"
+                          ? "bg-amber-400"
+                          : history?.today_status === "Excused"
+                          ? "bg-sky-400"
+                          : "bg-slate-400"
                       }`}
                     />
-                    <span className={history?.attended_today ? "text-emerald-300" : "text-amber-200"}>
-                      {history?.attended_today
-                        ? history.today_status || "Present"
-                        : history?.today_status || "Unmarked"}
+                    <span className={statusBadgeTextClass(history?.today_status ?? "")}>
+                      {history?.today_status || "Unmarked"}
                     </span>
                   </p>
                 </div>
@@ -439,65 +492,120 @@ export default function PlayerAttendanceDetail({
       <section className="grid gap-4 lg:grid-cols-12">
         {/* Left: Attendance Calendar */}
         <div className="dash-card rounded-2xl p-4 sm:p-5 lg:col-span-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <CalendarIcon className="h-4 w-4 text-sky-400" />
               <h3 className="text-sm font-bold text-white sm:text-base">Attendance Calendar</h3>
             </div>
-            <div className="flex flex-wrap items-center gap-2.5 text-[11px] font-medium text-blue-100/85">
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" /> Present
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2 py-0.5 text-emerald-300">
+                ✓ Present
               </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-rose-400" /> Absent
+              <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-0.5 text-rose-300">
+                ✕ Absent
               </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-amber-400" /> Late
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-amber-300">
+                ◔ Late
               </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-sky-400" /> Excused
+              <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/40 bg-sky-500/15 px-2 py-0.5 text-sky-300">
+                ★ Excused
               </span>
             </div>
           </div>
 
-          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-blue-200/70">
+          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-blue-200/70 sm:gap-1.5">
             {WEEKDAYS.map((day) => (
-              <div key={day} className="py-1.5">
+              <div key={day} className="py-1">
                 {day}
               </div>
             ))}
           </div>
 
-          <div className="mt-1 grid grid-cols-7 gap-1">
+          <div className="mt-1 grid grid-cols-7 gap-1 sm:gap-1.5">
             {calendarCells.map((cell) => {
               const rec = recordByDate.get(cell.iso);
+              const status = rec?.status ?? "";
               const isSelected = selectedDate === cell.iso;
               const isToday = cell.iso === todayISO;
+              const hasStatus = Boolean(status);
+
+              const baseCellClass = hasStatus
+                ? statusCalendarCellClass(status)
+                : isToday
+                ? "border-sky-400/60 bg-blue-800/45 text-white hover:bg-blue-800/65"
+                : cell.inMonth
+                ? "border-blue-400/15 bg-[#051136]/75 text-blue-100 hover:border-blue-400/40 hover:bg-blue-900/40"
+                : "border-transparent bg-transparent text-blue-300/30 hover:bg-white/5";
+
               return (
                 <button
                   key={cell.iso}
                   type="button"
                   onClick={() => setSelectedDate(cell.iso)}
-                  title={rec ? `${cell.iso}: ${rec.status}` : cell.iso}
-                  className={`flex h-10 flex-col items-center justify-center rounded-lg border text-xs font-semibold transition ${
+                  title={rec ? `${formatShortDate(cell.iso)} — ${rec.status}${rec.remarks ? ` (${rec.remarks})` : ""}` : formatShortDate(cell.iso)}
+                  className={`relative flex h-12 flex-col items-center justify-center rounded-xl border text-xs font-bold transition ${baseCellClass} ${
                     isSelected
-                      ? "border-sky-400 bg-blue-600/60 text-white shadow-[0_0_16px_rgba(56,189,248,0.65)]"
-                      : isToday
-                      ? "border-blue-400/50 bg-blue-900/55 text-white"
-                      : cell.inMonth
-                      ? "border-blue-400/15 bg-[#051136]/75 text-blue-100 hover:border-blue-400/40 hover:bg-blue-900/40"
-                      : "border-transparent bg-transparent text-blue-300/35 hover:bg-white/5"
+                      ? "ring-2 ring-sky-300 ring-offset-1 ring-offset-[#051238]"
+                      : ""
                   }`}
                 >
+                  {isToday && (
+                    <span
+                      title="Today"
+                      className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-sky-300 shadow-[0_0_6px_rgba(125,211,252,1)]"
+                    />
+                  )}
                   <span className="leading-none">{cell.day}</span>
-                  <span className="mt-1 h-1.5 w-1.5">
-                    {rec?.status ? (
-                      <span className={`block h-1.5 w-1.5 rounded-full ${statusDotClass(rec.status)}`} />
-                    ) : null}
-                  </span>
+                  {hasStatus ? (
+                    <span
+                      className={`mt-1 text-[10px] font-extrabold leading-none ${statusBadgeTextClass(status)}`}
+                    >
+                      {statusSymbol(status)} {status === "Present" ? "P" : status === "Absent" ? "A" : status === "Late" ? "L" : "E"}
+                    </span>
+                  ) : (
+                    <span className="mt-1 h-2.5 text-[9px] font-medium leading-none text-blue-300/30">
+                      {isToday ? "Today" : ""}
+                    </span>
+                  )}
                 </button>
               );
             })}
+          </div>
+
+          {/* Selected Date Status Strip */}
+          <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-blue-400/20 bg-[#040f30]/85 px-3.5 py-2.5">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-white">{formatShortDate(selectedDate)}</span>
+                {selectedRecord?.status ? (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${statusPillClass(selectedRecord.status)}`}
+                  >
+                    <span>{statusSymbol(selectedRecord.status)}</span>
+                    <span>{selectedRecord.status}</span>
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-slate-500/40 bg-slate-800/70 px-2.5 py-0.5 text-[11px] font-semibold text-slate-300">
+                    No Record
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 truncate text-[11px] text-blue-200/70">
+                {selectedRecord
+                  ? [selectedRecord.session_title, selectedRecord.remarks].filter(Boolean).join(" • ")
+                  : "Click any colored date to inspect or mark attendance for this day."}
+              </p>
+            </div>
+
+            {canRecord && (
+              <button
+                type="button"
+                onClick={() => onMarkForPlayer(player, selectedDate)}
+                className="shrink-0 rounded-lg border border-sky-400/45 bg-blue-600/30 px-3 py-1.5 text-[11px] font-bold text-sky-100 transition hover:bg-blue-600/55 hover:text-white"
+              >
+                {selectedRecord?.status ? "Update Status" : "Mark Day"}
+              </button>
+            )}
           </div>
         </div>
 
@@ -531,8 +639,55 @@ export default function PlayerAttendanceDetail({
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs sm:text-sm">
+            <>
+              {/* Mobile Recent Sessions Cards (< sm) */}
+              <div className="space-y-2 sm:hidden">
+                {visibleSessions.map((rec) => {
+                  const isSelectedRow = rec.date.slice(0, 10) === selectedDate;
+                  return (
+                    <button
+                      key={`mob-sess-${rec.attendance_id}-${rec.date}`}
+                      type="button"
+                      onClick={() => jumpToDate(rec.date)}
+                      className={`w-full rounded-xl border p-3 text-left transition ${
+                        isSelectedRow
+                          ? "border-sky-400/60 bg-blue-600/20"
+                          : "border-blue-400/15 bg-[#040f30]/75 hover:border-blue-400/35"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-white">
+                          {formatShortDate(rec.date)}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusPillClass(rec.status)}`}
+                        >
+                          {rec.status ? (
+                            <>
+                              <span>{statusSymbol(rec.status)}</span>
+                              <span>{rec.status}</span>
+                            </>
+                          ) : (
+                            "Unmarked"
+                          )}
+                        </span>
+                      </div>
+                      <p className="mt-1 truncate text-xs font-medium text-blue-100">
+                        {rec.session_title}
+                      </p>
+                      {rec.remarks && (
+                        <p className="mt-0.5 truncate text-[11px] text-blue-200/70">
+                          {rec.remarks}
+                        </p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Recent Sessions Table (>= sm) */}
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-left text-xs sm:text-sm">
                 <thead>
                   <tr className="border-b border-blue-400/15 text-[11px] font-semibold uppercase tracking-wider text-blue-200/70">
                     <th className="pb-2.5 pr-3">Date</th>
@@ -546,8 +701,9 @@ export default function PlayerAttendanceDetail({
                     const isSelectedRow = rec.date.slice(0, 10) === selectedDate;
                     return (
                       <tr
-                        key={rec.attendance_id}
-                        className={`transition hover:bg-blue-500/[0.06] ${
+                        key={`${rec.attendance_id}-${rec.date}`}
+                        onClick={() => jumpToDate(rec.date)}
+                        className={`cursor-pointer transition hover:bg-blue-500/[0.08] ${
                           isSelectedRow ? "bg-blue-600/20" : ""
                         }`}
                       >
@@ -577,7 +733,8 @@ export default function PlayerAttendanceDetail({
                   })}
                 </tbody>
               </table>
-            </div>
+              </div>
+            </>
           )}
         </div>
       </section>
@@ -620,11 +777,11 @@ export default function PlayerAttendanceDetail({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 border-t border-blue-400/15 pt-3 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+        <div className="flex flex-wrap items-center gap-2 border-t border-blue-400/15 pt-3 sm:gap-2.5 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
           <button
             type="button"
             onClick={handleDownloadReport}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-sky-500 px-4 py-2.5 text-xs font-bold text-white shadow-[0_0_18px_rgba(56,189,248,0.55)] transition hover:from-blue-500 hover:to-sky-400"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-sky-500 px-3.5 py-2.5 text-xs font-bold text-white shadow-[0_0_18px_rgba(56,189,248,0.55)] transition hover:from-blue-500 hover:to-sky-400 sm:flex-none sm:px-4"
           >
             <DownloadIcon className="h-4 w-4" />
             Download Report
@@ -633,7 +790,7 @@ export default function PlayerAttendanceDetail({
           <button
             type="button"
             onClick={() => window.print()}
-            className="inline-flex items-center gap-2 rounded-xl border border-blue-400/30 bg-blue-950/70 px-4 py-2.5 text-xs font-bold text-blue-100 transition hover:bg-blue-900/70 hover:text-white"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-blue-400/30 bg-blue-950/70 px-3.5 py-2.5 text-xs font-bold text-blue-100 transition hover:bg-blue-900/70 hover:text-white sm:flex-none sm:px-4"
           >
             <PrinterIcon className="h-4 w-4" />
             Print Report
@@ -643,7 +800,7 @@ export default function PlayerAttendanceDetail({
             <button
               type="button"
               onClick={() => onMarkForPlayer(player, selectedDate)}
-              className="inline-flex items-center gap-2 rounded-xl border border-sky-400/40 bg-blue-600/25 px-4 py-2.5 text-xs font-bold text-sky-100 transition hover:bg-blue-600/45 hover:text-white"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-sky-400/40 bg-blue-600/25 px-4 py-2.5 text-xs font-bold text-sky-100 transition hover:bg-blue-600/45 hover:text-white sm:w-auto"
             >
               <CalendarIcon className="h-4 w-4" />
               Mark Attendance

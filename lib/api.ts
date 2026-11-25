@@ -18,6 +18,7 @@ export const AUTH_ENDPOINTS = {
   login: `${API_BASE_URL}/api/auth/login`,
   forgotPassword: `${API_BASE_URL}/api/auth/forgot-password`,
   me: `${API_BASE_URL}/api/auth/me`,
+  profile: `${API_BASE_URL}/api/profile`,
 } as const;
 
 export const DASHBOARD_ENDPOINTS = {
@@ -34,6 +35,22 @@ export const DASHBOARD_ENDPOINTS = {
   playerAttendance: (playerUserId: number | string) =>
     `${API_BASE_URL}/api/attendance/player/${playerUserId}`,
   players: `${API_BASE_URL}/api/players`,
+  parents: `${API_BASE_URL}/api/parents`,
+  myPlayers: `${API_BASE_URL}/api/my-players`,
+  parentPlayers: (parentId: number | string) => `${API_BASE_URL}/api/parents/${parentId}/players`,
+  linkParentPlayer: `${API_BASE_URL}/api/parents/link-player`,
+  unlinkParentPlayer: (linkId: number | string) =>
+    `${API_BASE_URL}/api/parents/link-player/${linkId}`,
+  tournaments: `${API_BASE_URL}/api/tournaments`,
+  tournamentById: (id: number | string) => `${API_BASE_URL}/api/tournaments/${id}`,
+  tournamentMatches: (id: number | string) => `${API_BASE_URL}/api/tournaments/${id}/matches`,
+  tournamentMatchById: (matchId: number | string) =>
+    `${API_BASE_URL}/api/tournaments/matches/${matchId}`,
+  tournamentRoster: (id: number | string) => `${API_BASE_URL}/api/tournaments/${id}/roster`,
+  tournamentRosterById: (rosterId: number | string) =>
+    `${API_BASE_URL}/api/tournaments/roster/${rosterId}`,
+  tournamentRosterConsent: (rosterId: number | string) =>
+    `${API_BASE_URL}/api/tournaments/roster/${rosterId}/consent`,
 } as const;
 
 const TOKEN_KEY = "token";
@@ -82,6 +99,7 @@ export interface ApiResult<T = unknown> {
   status: number;
   data: T;
   message: string;
+  endpoint?: string;
 }
 
 export interface AuthenticatorSetup {
@@ -166,6 +184,126 @@ export function extractAuthenticatorSetup(data: unknown): AuthenticatorSetup {
   return result;
 }
 
+function extractRawErrorText(record: Record<string, unknown>): string {
+  if (typeof record.error === "string" && record.error.trim()) return record.error.trim();
+  if (record.error && typeof record.error === "object") {
+    const nested = record.error as Record<string, unknown>;
+    if (typeof nested.message === "string" && nested.message.trim()) return nested.message.trim();
+  }
+  if (Array.isArray(record.errors) && record.errors.length > 0) {
+    const first = record.errors[0];
+    if (typeof first === "string") return first;
+    if (first && typeof first === "object" && typeof (first as Record<string, unknown>).message === "string") {
+      return String((first as Record<string, unknown>).message);
+    }
+  }
+  if (record.errors && typeof record.errors === "object" && !Array.isArray(record.errors)) {
+    const vals = Object.values(record.errors as Record<string, unknown>)
+      .flat()
+      .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+    if (vals.length > 0) return vals[0];
+  }
+  if (typeof record.details === "string" && record.details.trim()) return record.details.trim();
+  if (typeof record.message === "string" && record.message.trim()) return record.message.trim();
+  return "";
+}
+
+function getEndpointPath(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return url;
+  }
+}
+
+async function parseApiResponse<T>(
+  response: Response,
+  method: string,
+  url: string
+): Promise<ApiResult<T>> {
+  const endpoint = `${method} ${getEndpointPath(url)}`;
+  const contentType = response.headers.get("content-type") || "";
+  let data: unknown = null;
+  let plainText = "";
+
+  if (contentType.includes("application/json")) {
+    try {
+      data = await response.json();
+    } catch {
+      plainText = await response.text().catch(() => "");
+      data = plainText ? { message: plainText } : {};
+    }
+  } else {
+    plainText = (await response.text().catch(() => "")).trim();
+    if (plainText.startsWith("{") || plainText.startsWith("[")) {
+      try {
+        data = JSON.parse(plainText);
+      } catch {
+        data = { message: plainText };
+      }
+    } else {
+      data = plainText ? { message: plainText } : {};
+    }
+  }
+
+  const record =
+    data && typeof data === "object" && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : {};
+
+  // Catch backend errors even if the server accidentally returned HTTP 200
+  const hasExplicitBodyError =
+    (typeof record.error === "string" && record.error.trim().length > 0) ||
+    (record.error !== undefined && record.error !== null && typeof record.error === "object") ||
+    record.success === false ||
+    record.ok === false ||
+    (typeof record.status === "string" && /^(error|fail|failed)$/i.test(record.status)) ||
+    /^(method not allowed|cannot (get|post|put|patch|delete)\b|not found|internal server error|unauthorized|forbidden)/i.test(
+      plainText
+    );
+
+  const ok = response.ok && !hasExplicitBodyError;
+  const rawMessage = extractRawErrorText(record) || plainText;
+
+  if (ok) {
+    return {
+      ok: true,
+      status: response.status,
+      data: data as T,
+      message: (typeof record.message === "string" && record.message.trim()) || "Success.",
+      endpoint,
+    };
+  }
+
+  let message = rawMessage;
+  if (response.status === 405 || /^method not allowed$/i.test(rawMessage)) {
+    message = `Method Not Allowed (405): ${endpoint} is not enabled on ${API_BASE_URL}. Check if this route is registered/deployed on your backend.`;
+  } else if (response.status === 404) {
+    message = rawMessage && !/^cannot /i.test(rawMessage) && !/^not found$/i.test(rawMessage)
+      ? rawMessage
+      : `Endpoint not found (404): ${endpoint} on ${API_BASE_URL}.`;
+  } else if (response.status === 403) {
+    message = rawMessage || "Access denied (403): You do not have permission for this action.";
+  } else if (response.status === 401) {
+    message = rawMessage || "Unauthorized (401): Please log in again.";
+  } else if (response.status >= 500) {
+    message = rawMessage
+      ? `Server Error (${response.status}): ${rawMessage}`
+      : `Server Error (${response.status}): Please check your backend logs.`;
+  } else if (!message) {
+    message = `Request failed (HTTP ${response.status}).`;
+  }
+
+  return {
+    ok: false,
+    status: response.status,
+    data: data as T,
+    message,
+    endpoint,
+  };
+}
+
 async function requestJson<T = unknown>(
   url: string,
   body: Record<string, unknown>
@@ -180,37 +318,15 @@ async function requestJson<T = unknown>(
       body: JSON.stringify(body),
     });
 
-    const contentType = response.headers.get("content-type") || "";
-    let data: unknown = null;
-
-    if (contentType.includes("application/json")) {
-      data = await response.json();
-    } else {
-      const text = await response.text();
-      data = text ? { message: text } : {};
-    }
-
-    const record =
-      data && typeof data === "object" ? (data as Record<string, unknown>) : {};
-
-    const message =
-      (typeof record.message === "string" && record.message) ||
-      (typeof record.error === "string" && record.error) ||
-      (response.ok ? "Success." : "Something went wrong. Please try again.");
-
-    return {
-      ok: response.ok,
-      status: response.status,
-      data: data as T,
-      message,
-    };
+    return parseApiResponse<T>(response, "POST", url);
   } catch (error) {
     console.error("API request failed:", url, error);
     return {
       ok: false,
       status: 0,
       data: null as T,
-      message: "Unable to reach the server. Please check your connection and try again.",
+      message: `Unable to reach ${API_BASE_URL}. Make sure your backend server is running and CORS is enabled.`,
+      endpoint: `POST ${getEndpointPath(url)}`,
     };
   }
 }
@@ -310,68 +426,190 @@ export interface ModuleGroup {
 }
 
 const ACTION_VERB_REGEX =
-  /^(view|create|add|edit|update|delete|remove|manage|approve|reject|record|mark|generate|issue|pay|verify|send|upload|download|export|print|assign|reset|toggle|submit|list|configure|review)\b/i;
+  /^(view|create|add|edit|update|delete|remove|manage|approve|reject|record|mark|generate|issue|pay|verify|send|upload|download|export|print|assign|reset|toggle|submit|list|configure|review|link|unlink|change|enroll|check)\b/i;
 
 export function isActionPermissionName(name: string): boolean {
   return ACTION_VERB_REGEX.test(name.trim());
 }
 
+type ModuleDomainKey =
+  | "dashboard"
+  | "rbac"
+  | "tournaments"
+  | "attendance"
+  | "soa"
+  | "players"
+  | "profile"
+  | "users"
+  | "announcements"
+  | "gallery"
+  | "settings";
+
+const DOMAIN_FALLBACK_LABELS: Record<ModuleDomainKey, string> = {
+  dashboard: "Dashboard",
+  rbac: "RBAC",
+  tournaments: "Tournaments",
+  attendance: "Attendance",
+  soa: "SOA & Billing",
+  players: "Players",
+  profile: "Profile",
+  users: "User Management",
+  announcements: "Announcements",
+  gallery: "Gallery",
+  settings: "Settings",
+};
+
+function inferModuleDomain(mod: RbacModule): ModuleDomainKey | null {
+  const haystack = `${mod.name} ${mod.category ?? ""} ${mod.code ?? ""}`.toLowerCase();
+  if (/\bdashboard\b/.test(haystack)) return "dashboard";
+  if (/(rbac|role\s*access|role\s*permission|\broles?\b)/.test(haystack)) return "rbac";
+  if (/(own\s*profile|\bprofile\b|my\s*account|password)/.test(haystack)) return "profile";
+  if (/(attendance|training|session|check.?in)/.test(haystack)) return "attendance";
+  if (/(soa|bill|payment|invoice|fee|receipt)/.test(haystack)) return "soa";
+  if (/(tournament|match|fixture|standing|league|event)/.test(haystack)) return "tournaments";
+  if (/(player|child|parent.?link|roster|team)/.test(haystack)) return "players";
+  if (/(user\s*management|\busers?\b|\bmembers?\b|\bcoaches?\b|\bparents?\b)/.test(haystack)) {
+    return "users";
+  }
+  if (/(announcement|news|notice)/.test(haystack)) return "announcements";
+  if (/(gallery|photo|media)/.test(haystack)) return "gallery";
+  if (/(setting|config)/.test(haystack)) return "settings";
+  return null;
+}
+
 /**
  * Groups flat RBAC modules into top-level parent sidebar sections and their nested action permissions.
- * Uses explicit `parent_id` when present, and falls back to grouping action-verb rows
- * ("View ...", "Create ...", "Edit ...", "Delete ...", "Manage ...", etc.) under their parent module.
+ * Ensures action-verb rows ("View Players", "View Own Profile", "Edit Own Profile", "View SOA",
+ * "Submit Payment", "View Training Sessions", etc.) ALWAYS nest under their parent module —
+ * even when the backend returns parent_id = null or omits the parent row for a role.
  */
-export function groupModulesByParent(modules: RbacModule[]): ModuleGroup[] {
+export function groupModulesByParent(
+  modules: RbacModule[],
+  options?: { collapseOrphans?: boolean }
+): ModuleGroup[] {
   if (modules.length === 0) return [];
 
-  const hasExplicitParentIds = modules.some((m) => typeof m.parent_id === "number" && m.parent_id > 0);
+  const collapseOrphans = options?.collapseOrphans ?? false;
   const groups: ModuleGroup[] = [];
   const byId = new Map<number, ModuleGroup>();
+  const byDomain = new Map<ModuleDomainKey, ModuleGroup>();
+  const byNameLower = new Map<string, ModuleGroup>();
+  const childrenQueue: RbacModule[] = [];
 
-  if (hasExplicitParentIds) {
-    for (const mod of modules) {
-      if (!mod.parent_id) {
-        const g: ModuleGroup = { parent: mod, actions: [] };
-        groups.push(g);
-        byId.set(mod.id, g);
+  // Pass 1: Collect true top-level parent modules (no parent_id and not an action verb)
+  for (const mod of modules) {
+    const isAction = isActionPermissionName(mod.name);
+    if (!mod.parent_id && !isAction) {
+      const g: ModuleGroup = { parent: mod, actions: [] };
+      groups.push(g);
+      byId.set(mod.id, g);
+      byNameLower.set(mod.name.trim().toLowerCase(), g);
+      const dom = inferModuleDomain(mod);
+      if (dom && !byDomain.has(dom)) {
+        byDomain.set(dom, g);
       }
+    } else {
+      childrenQueue.push(mod);
     }
-
-    for (const mod of modules) {
-      if (mod.parent_id) {
-        const parentGroup = byId.get(mod.parent_id);
-        if (parentGroup) {
-          parentGroup.actions.push(mod);
-        } else {
-          // Orphan child whose parent module isn't selected — keep visible cleanly
-          const g: ModuleGroup = { parent: mod, actions: [] };
-          groups.push(g);
-          byId.set(mod.id, g);
-        }
-      }
-    }
-    return groups;
   }
 
-  // Fallback when DB returns sequential rows without parent_id
-  let currentGroup: ModuleGroup | null = null;
-  for (const mod of modules) {
-    if (!isActionPermissionName(mod.name)) {
-      const g: ModuleGroup = { parent: mod, actions: [] };
+  // Pass 2: Attach every action/sub-module to its parent via parent_id -> category -> domain inference
+  for (const mod of childrenQueue) {
+    // 1) Direct parent_id match
+    if (mod.parent_id && byId.has(mod.parent_id)) {
+      byId.get(mod.parent_id)!.actions.push(mod);
+      continue;
+    }
+
+    // 2) Explicit category/parent_name match
+    const catKey = mod.category?.trim().toLowerCase();
+    if (catKey && byNameLower.has(catKey)) {
+      byNameLower.get(catKey)!.actions.push(mod);
+      continue;
+    }
+
+    // 3) Domain match (e.g. "View Players" -> Players, "View Own Profile" -> Profile, "View SOA" -> SOA & Billing)
+    const dom = inferModuleDomain(mod);
+    if (dom && byDomain.has(dom)) {
+      byDomain.get(dom)!.actions.push(mod);
+      continue;
+    }
+
+    // 4) Orphan action whose parent module wasn't enabled for this role:
+    // For the sidebar (collapseOrphans=true), fold all orphans of the same domain into ONE clean menu item.
+    if (collapseOrphans && dom) {
+      const syntheticParent: RbacModule = {
+        ...mod,
+        name: DOMAIN_FALLBACK_LABELS[dom],
+        parent_id: null,
+      };
+      const g: ModuleGroup = { parent: syntheticParent, actions: [mod] };
       groups.push(g);
       byId.set(mod.id, g);
-      currentGroup = g;
-    } else if (currentGroup) {
-      currentGroup.actions.push(mod);
-    } else {
-      const g: ModuleGroup = { parent: mod, actions: [] };
-      groups.push(g);
-      byId.set(mod.id, g);
-      currentGroup = g;
+      byDomain.set(dom, g);
+      byNameLower.set(syntheticParent.name.toLowerCase(), g);
+      continue;
+    }
+
+    // Fallback: keep accessible rather than dropping it
+    const g: ModuleGroup = { parent: mod, actions: [] };
+    groups.push(g);
+    byId.set(mod.id, g);
+    if (dom && !byDomain.has(dom)) {
+      byDomain.set(dom, g);
     }
   }
 
   return groups;
+}
+
+export interface UpdateOwnProfilePayload {
+  first_name: string;
+  middle_name?: string;
+  last_name: string;
+  gender?: string;
+  phone_number?: string;
+  address?: string;
+  email?: string;
+}
+
+export async function updateOwnProfile(payload: UpdateOwnProfilePayload) {
+  const body = {
+    first_name: payload.first_name.trim(),
+    middle_name: (payload.middle_name ?? "").trim(),
+    last_name: payload.last_name.trim(),
+    gender: (payload.gender ?? "").trim(),
+    phone_number: (payload.phone_number ?? "").trim(),
+    address: (payload.address ?? "").trim(),
+    ...(payload.email?.trim() ? { email: payload.email.trim() } : {}),
+  };
+
+  const candidates = [
+    AUTH_ENDPOINTS.profile,
+    `${API_BASE_URL}/api/auth/profile`,
+    `${API_BASE_URL}/api/users/profile`,
+  ];
+
+  let lastResult: ApiResult<Record<string, unknown>> = {
+    ok: false,
+    status: 404,
+    data: {},
+    message: "Profile update endpoint is not available yet.",
+  };
+
+  for (const url of candidates) {
+    const res = await authRequest<Record<string, unknown>>(url, {
+      method: "PUT",
+      body,
+    });
+    if (res.ok) return res;
+    lastResult = res;
+    if (res.status !== 404 && res.status !== 405) {
+      return res;
+    }
+  }
+
+  return lastResult;
 }
 
 export interface RoleAccessRecord {
@@ -595,6 +833,7 @@ async function authRequest<T = unknown>(
   url: string,
   options: { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: Record<string, unknown> } = {}
 ): Promise<ApiResult<T>> {
+  const method = options.method ?? "GET";
   const token = getAuthToken();
   if (!token) {
     return {
@@ -602,12 +841,13 @@ async function authRequest<T = unknown>(
       status: 401,
       data: null as T,
       message: "Please log in to continue.",
+      endpoint: `${method} ${getEndpointPath(url)}`,
     };
   }
 
   try {
     const response = await fetch(url, {
-      method: options.method ?? "GET",
+      method,
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${token}`,
@@ -616,37 +856,15 @@ async function authRequest<T = unknown>(
       ...(options.body ? { body: JSON.stringify(options.body) } : {}),
     });
 
-    const contentType = response.headers.get("content-type") || "";
-    let data: unknown = null;
-
-    if (contentType.includes("application/json")) {
-      data = await response.json();
-    } else {
-      const text = await response.text();
-      data = text ? { message: text } : {};
-    }
-
-    const record =
-      data && typeof data === "object" ? (data as Record<string, unknown>) : {};
-
-    const message =
-      (typeof record.message === "string" && record.message) ||
-      (typeof record.error === "string" && record.error) ||
-      (response.ok ? "Success." : `Request failed (HTTP ${response.status}).`);
-
-    return {
-      ok: response.ok,
-      status: response.status,
-      data: data as T,
-      message,
-    };
+    return parseApiResponse<T>(response, method, url);
   } catch (error) {
     console.error("Authorized API request failed:", url, error);
     return {
       ok: false,
       status: 0,
       data: null as T,
-      message: "Unable to reach the server. Please check your connection and try again.",
+      message: `Unable to reach ${API_BASE_URL}. Make sure your backend server is running and CORS is enabled.`,
+      endpoint: `${method} ${getEndpointPath(url)}`,
     };
   }
 }
@@ -1264,6 +1482,19 @@ export async function markBulkDailyAttendance(payload: {
   });
 }
 
+function normalizeRecordDate(rawVal: unknown): string {
+  if (!rawVal) return "";
+  const str = String(rawVal).trim();
+  const isoMatch = str.match(/(\d{4}-\d{2}-\d{2})/);
+  if (isoMatch) return isoMatch[1];
+  const parsed = new Date(str);
+  if (Number.isNaN(parsed.getTime())) return str;
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, "0");
+  const d = String(parsed.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export async function fetchPlayerAttendanceHistory(
   playerUserId: number | string,
   date?: string
@@ -1286,34 +1517,83 @@ export async function fetchPlayerAttendanceHistory(
     unknown
   >;
 
-  const records: PlayerAttendanceRecord[] = asObjectArray(root.records).map((r, idx) => {
-    const status = normalizeStatus(r.status);
+  const rawList =
+    root.records ??
+    root.history ??
+    root.attendance ??
+    root.attendance_records ??
+    root.sessions ??
+    root.logs ??
+    [];
+
+  let records: PlayerAttendanceRecord[] = asObjectArray(rawList).map((r, idx) => {
+    const status = normalizeStatus(r.status ?? r.attendance_status);
+    const recDate = normalizeRecordDate(
+      r.date ?? r.session_date ?? r.attendance_date ?? r.created_at
+    );
     return {
       attendance_id: Number(r.attendance_id ?? r.id ?? idx + 1),
       session_id: Number(r.session_id ?? 0),
-      date: String(r.date ?? ""),
-      session_title: String(r.session_title ?? `Daily Training - ${r.date ?? ""}`),
+      date: recDate,
+      session_title: String(
+        r.session_title ?? r.title ?? r.session_name ?? (recDate ? `Daily Training - ${recDate}` : "Training Session")
+      ),
       status,
-      attended: typeof r.attended === "boolean" ? r.attended : status === "Present" || status === "Late",
+      attended:
+        typeof r.attended === "boolean" ? r.attended : status === "Present" || status === "Late",
       check_in_time: typeof r.check_in_time === "string" ? r.check_in_time : null,
-      remarks: String(r.remarks ?? ""),
+      remarks: String(r.remarks ?? r.notes ?? ""),
     };
   });
 
+  const totalCount = Number(summaryRaw.total ?? records.length) || 0;
+  const resolvedPlayerId = Number(root.player_user_id ?? playerUserId);
+  const todayStr = normalizeRecordDate(root.today) || getLocalTodayISO();
   const todayStatus = normalizeStatus(root.today_status);
+
+  // Fallback: if /api/attendance/player/:id returned summary counts without the array, hydrate from /api/attendance/history
+  if (records.length === 0 && totalCount > 0) {
+    const allRes = await fetchAllAttendanceHistory();
+    if (allRes.ok && allRes.data) {
+      const match = allRes.data.players.find((p) => p.player_user_id === resolvedPlayerId);
+      if (match && match.history.length > 0) {
+        records = match.history.map((rec) => ({
+          ...rec,
+          date: normalizeRecordDate(rec.date),
+        }));
+      }
+    }
+  }
+
+  // Ensure today's status is visible on the calendar if backend reported today_status but omitted today's row
+  if (todayStatus && !records.some((r) => r.date === todayStr)) {
+    records = [
+      {
+        attendance_id: -1,
+        session_id: 0,
+        date: todayStr,
+        session_title: `Daily Training - ${todayStr}`,
+        status: todayStatus,
+        attended: todayStatus === "Present" || todayStatus === "Late",
+        check_in_time: null,
+        remarks: "",
+      },
+      ...records,
+    ];
+  }
 
   return {
     ...res,
     data: {
-      player_user_id: Number(root.player_user_id ?? playerUserId),
-      today: String(root.today ?? getLocalTodayISO()),
+      player_user_id: resolvedPlayerId,
+      today: todayStr,
       attended_today:
         typeof root.attended_today === "boolean"
           ? root.attended_today
           : todayStatus === "Present" || todayStatus === "Late",
       today_status: todayStatus,
       summary: {
-        total: Number(summaryRaw.total ?? records.length) || 0,
+        total: totalCount || records.length,
         present: Number(summaryRaw.present ?? 0) || 0,
         absent: Number(summaryRaw.absent ?? 0) || 0,
         late: Number(summaryRaw.late ?? 0) || 0,
@@ -1434,4 +1714,818 @@ export async function fetchAllAttendanceHistory(params?: {
       players,
     },
   };
+}
+
+/* ==================== Parent–Player Linking & Roster API ==================== */
+
+export const RELATIONSHIP_OPTIONS = [
+  { id: 15, label: "Father" },
+  { id: 16, label: "Mother" },
+  { id: 17, label: "Guardian" },
+  { id: 18, label: "Relative" },
+] as const;
+
+export const RELATIONSHIP_LABELS: Record<number, string> = {
+  15: "Father",
+  16: "Mother",
+  17: "Guardian",
+  18: "Relative",
+};
+
+export interface ParentOption {
+  user_id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  phone_number: string;
+}
+
+export interface LinkedPlayer {
+  link_id: number | null;
+  parent_user_id: number | null;
+  parent_name: string;
+  player_user_id: number;
+  relationship_id: number | null;
+  relationship: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  gender: string;
+  age: number | null;
+  age_category: string;
+  position: string;
+  jersey_number: number | null;
+  status: string;
+}
+
+export interface LinkParentPlayersPayload {
+  parent_name: string;
+  relationship: string;
+  player_user_ids: number[];
+}
+
+function normalizeLinkedPlayer(raw: Record<string, unknown>): LinkedPlayer {
+  const nestedPlayer = (
+    raw.player && typeof raw.player === "object"
+      ? raw.player
+      : raw.user && typeof raw.user === "object"
+      ? raw.user
+      : raw
+  ) as Record<string, unknown>;
+
+  const nestedProfile = (
+    raw.player_profile && typeof raw.player_profile === "object"
+      ? raw.player_profile
+      : nestedPlayer.player_profile && typeof nestedPlayer.player_profile === "object"
+      ? nestedPlayer.player_profile
+      : raw.profile && typeof raw.profile === "object"
+      ? raw.profile
+      : nestedPlayer
+  ) as Record<string, unknown>;
+
+  const linkIdRaw = raw.link_id ?? raw.parent_player_id ?? (raw.player_user_id ? raw.id : null);
+  const linkId = linkIdRaw !== null && linkIdRaw !== undefined ? Number(linkIdRaw) : null;
+
+  const playerUserId = Number(
+    raw.player_user_id ?? nestedPlayer.user_id ?? nestedPlayer.id ?? raw.id ?? 0
+  );
+
+  const parentUserIdRaw = raw.parent_user_id ?? null;
+  const parentUserId =
+    parentUserIdRaw !== null && parentUserIdRaw !== undefined ? Number(parentUserIdRaw) : null;
+
+  const relIdRaw = raw.relationship_id ?? null;
+  const relId = relIdRaw !== null && relIdRaw !== undefined ? Number(relIdRaw) : null;
+
+  const relLabel = String(
+    raw.relationship ??
+      raw.relationship_name ??
+      (relId && RELATIONSHIP_LABELS[relId] ? RELATIONSHIP_LABELS[relId] : "")
+  );
+
+  const jerseyRaw =
+    raw.jersey_number ?? nestedProfile.jersey_number ?? nestedPlayer.jersey_number ?? null;
+  const jersey = jerseyRaw !== null && jerseyRaw !== undefined ? Number(jerseyRaw) : null;
+
+  const firstName = String(
+    raw.first_name ?? nestedProfile.first_name ?? nestedPlayer.first_name ?? ""
+  ).trim();
+  const lastName = String(
+    raw.last_name ?? nestedProfile.last_name ?? nestedPlayer.last_name ?? ""
+  ).trim();
+  const rawFullName = String(
+    raw.full_name ?? nestedProfile.full_name ?? nestedPlayer.full_name ?? ""
+  ).trim();
+  const fullName = rawFullName || [firstName, lastName].filter(Boolean).join(" ");
+
+  const parentObj =
+    raw.parent && typeof raw.parent === "object" ? (raw.parent as Record<string, unknown>) : null;
+  const parentName = String(
+    raw.parent_name ??
+      parentObj?.full_name ??
+      [parentObj?.first_name, parentObj?.last_name].filter(Boolean).join(" ") ??
+      ""
+  ).trim();
+
+  const ageRaw = raw.age ?? nestedProfile.age ?? nestedPlayer.age ?? null;
+  const ageNum = ageRaw !== null && ageRaw !== undefined && String(ageRaw).trim() !== "" ? Number(ageRaw) : null;
+
+  const statusStr = String(raw.status ?? nestedProfile.status ?? nestedPlayer.status ?? "").trim();
+
+  return {
+    link_id: linkId !== null && !Number.isNaN(linkId) && linkId > 0 ? linkId : null,
+    parent_user_id:
+      parentUserId !== null && !Number.isNaN(parentUserId) && parentUserId > 0
+        ? parentUserId
+        : null,
+    parent_name: parentName,
+    player_user_id: !Number.isNaN(playerUserId) ? playerUserId : 0,
+    relationship_id: relId !== null && !Number.isNaN(relId) && relId > 0 ? relId : null,
+    relationship: relLabel,
+    first_name: firstName || fullName.split(/\s+/)[0] || "",
+    last_name: lastName || fullName.split(/\s+/).slice(1).join(" ") || "",
+    full_name: fullName,
+    gender: String(raw.gender ?? nestedProfile.gender ?? nestedPlayer.gender ?? ""),
+    age: ageNum !== null && !Number.isNaN(ageNum) && ageNum > 0 ? ageNum : null,
+    age_category: String(
+      raw.age_category ?? nestedProfile.age_category ?? nestedPlayer.age_category ?? ""
+    ),
+    position: String(raw.position ?? nestedProfile.position ?? nestedPlayer.position ?? ""),
+    jersey_number: jersey !== null && !Number.isNaN(jersey) ? jersey : null,
+    status: statusStr,
+  };
+}
+
+function extractPlayersArray(data: unknown): LinkedPlayer[] {
+  const list = Array.isArray(data)
+    ? data
+    : data && typeof data === "object"
+    ? (data as Record<string, unknown>).players ??
+      (data as Record<string, unknown>).children ??
+      (data as Record<string, unknown>).data ??
+      []
+    : [];
+  return asObjectArray(list).map(normalizeLinkedPlayer);
+}
+
+export async function fetchParents(search?: string): Promise<ApiResult<ParentOption[]>> {
+  const url = search?.trim()
+    ? `${DASHBOARD_ENDPOINTS.parents}?search=${encodeURIComponent(search.trim())}`
+    : DASHBOARD_ENDPOINTS.parents;
+
+  const res = await authRequest<unknown>(url);
+  if (!res.ok) return { ...res, data: [] };
+
+  const rawList = Array.isArray(res.data)
+    ? res.data
+    : res.data && typeof res.data === "object"
+    ? (res.data as Record<string, unknown>).parents ??
+      (res.data as Record<string, unknown>).data ??
+      []
+    : [];
+
+  const parents: ParentOption[] = asObjectArray(rawList).map((p) => {
+    const first = String(p.first_name ?? "").trim();
+    const last = String(p.last_name ?? "").trim();
+    const full = String(p.full_name ?? "").trim() || [first, last].filter(Boolean).join(" ");
+    return {
+      user_id: Number(p.user_id ?? p.id ?? 0),
+      username: String(p.username ?? ""),
+      email: String(p.email ?? ""),
+      first_name: first,
+      last_name: last,
+      full_name: full || String(p.username ?? `Parent #${p.user_id ?? p.id ?? ""}`),
+      phone_number: String(p.phone_number ?? ""),
+    };
+  });
+
+  return { ...res, data: parents };
+}
+
+export async function fetchMyPlayers(): Promise<ApiResult<LinkedPlayer[]>> {
+  const res = await authRequest<unknown>(DASHBOARD_ENDPOINTS.myPlayers);
+  if (!res.ok) return { ...res, data: [] };
+  return { ...res, data: extractPlayersArray(res.data) };
+}
+
+export async function fetchParentPlayers(
+  parentId: number | string
+): Promise<ApiResult<LinkedPlayer[]>> {
+  const res = await authRequest<unknown>(DASHBOARD_ENDPOINTS.parentPlayers(parentId));
+  if (!res.ok) return { ...res, data: [] };
+  return { ...res, data: extractPlayersArray(res.data) };
+}
+
+export async function fetchAllPlayersRoster(): Promise<ApiResult<LinkedPlayer[]>> {
+  const res = await authRequest<unknown>(DASHBOARD_ENDPOINTS.players);
+  if (res.ok) {
+    const parsed = extractPlayersArray(res.data);
+    if (parsed.length > 0) return { ...res, data: parsed };
+  }
+
+  // Fallback to GET /api/attendance/daily which always returns the full players roster
+  const dailyRes = await fetchDailyAttendance();
+  if (dailyRes.ok && dailyRes.data) {
+    return {
+      ok: true,
+      status: 200,
+      message: "Loaded.",
+      data: dailyRes.data.players.map((p) => ({
+        link_id: null,
+        parent_user_id: null,
+        parent_name: "",
+        player_user_id: p.player_user_id,
+        relationship_id: null,
+        relationship: "",
+        first_name: p.first_name,
+        last_name: p.last_name,
+        full_name: [p.first_name, p.last_name].filter(Boolean).join(" "),
+        gender: "",
+        age: null,
+        age_category: p.age_category,
+        position: p.position,
+        jersey_number: p.jersey_number,
+        status: "",
+      })),
+    };
+  }
+
+  return { ...res, data: [] };
+}
+
+export async function linkParentPlayers(payload: LinkParentPlayersPayload) {
+  const uniqueIds = Array.from(new Set(payload.player_user_ids)).filter(
+    (id) => Number.isInteger(id) && id > 0
+  );
+
+  return authRequest<{
+    message?: string;
+    parent_user_id?: number;
+    parent_name?: string;
+    linked_count?: number;
+    data?: unknown;
+  }>(DASHBOARD_ENDPOINTS.linkParentPlayer, {
+    method: "POST",
+    body: {
+      parent_name: payload.parent_name.trim(),
+      relationship: payload.relationship.trim(),
+      player_user_ids: uniqueIds,
+    },
+  });
+}
+
+export async function unlinkParentPlayer(linkId: number | string) {
+  return authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.unlinkParentPlayer(linkId), {
+    method: "DELETE",
+  });
+}
+
+/* ==================== Tournaments, Match Schedules & Roster API ==================== */
+
+export interface TournamentMatch {
+  id: number;
+  tournament_id: number;
+  age_category: string;
+  game_label: string;
+  home_team: string;
+  opponent: string;
+  match_date: string;
+  match_time: string;
+  pitch: string;
+  alab_score: number | null;
+  opponent_score: number | null;
+  status: string;
+  remarks: string;
+}
+
+export interface TournamentRosterItem {
+  id: number;
+  tournament_id: number;
+  player_user_id: number;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  age_category: string;
+  position: string;
+  jersey_number: number | null;
+  parent_consent: boolean;
+  remarks: string;
+}
+
+export interface TournamentItem {
+  id: number;
+  title: string;
+  description: string;
+  venue: string;
+  start_date: string;
+  end_date: string;
+  age_categories: string[];
+  status: string;
+  registration_fee: number;
+  match_count: number;
+  roster_count: number;
+}
+
+export interface TournamentDetail extends TournamentItem {
+  matches: TournamentMatch[];
+  matches_by_category: Record<string, TournamentMatch[]>;
+  rosters: TournamentRosterItem[];
+}
+
+export interface CreateMatchPayload {
+  age_category: string;
+  game_label: string;
+  home_team?: string;
+  opponent: string;
+  match_date: string;
+  match_time: string;
+  pitch?: string;
+  remarks?: string;
+}
+
+export interface UpdateMatchPayload {
+  age_category?: string;
+  game_label?: string;
+  home_team?: string;
+  opponent?: string;
+  match_date?: string;
+  match_time?: string;
+  pitch?: string;
+  alab_score?: number | null;
+  opponent_score?: number | null;
+  status?: string;
+  remarks?: string;
+}
+
+export interface CreateTournamentPayload {
+  title: string;
+  description?: string;
+  venue: string;
+  start_date: string;
+  end_date: string;
+  age_categories: string[];
+  status?: string;
+  registration_fee?: number;
+  matches?: CreateMatchPayload[];
+}
+
+function parseAgeCategories(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return Array.from(
+      new Set(raw.map((v) => String(v ?? "").trim()).filter(Boolean))
+    );
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    return Array.from(
+      new Set(
+        raw
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      )
+    );
+  }
+  return [];
+}
+
+function normalizeMatchTime(val: unknown): string {
+  const s = String(val ?? "").trim();
+  if (!s) return "";
+  // Normalize "08:00" -> "08:00:00" when sending, keep clean HH:MM:SS or HH:MM when displaying
+  return s;
+}
+
+function ensureHHMMSS(val: string): string {
+  const s = val.trim();
+  if (!s) return "";
+  if (/^\d{2}:\d{2}$/.test(s)) return `${s}:00`;
+  return s;
+}
+
+function encodeOpponentForBackend(homeTeam: string | undefined, opponent: string, ageCategory?: string): string {
+  const cleanOpp = opponent.trim();
+  const cleanHome = (homeTeam ?? "").trim();
+  if (!cleanHome) return cleanOpp;
+  const defaultAlab = ageCategory ? `ALAB FC ${ageCategory}` : "ALAB FC";
+  if (
+    cleanHome.toLowerCase() === "alab fc" ||
+    cleanHome.toLowerCase() === "alab" ||
+    cleanHome.toLowerCase() === defaultAlab.toLowerCase()
+  ) {
+    return cleanOpp;
+  }
+  return `${cleanHome} vs ${cleanOpp}`;
+}
+
+function normalizeTournamentMatch(raw: Record<string, unknown>, fallbackTournamentId = 0): TournamentMatch {
+  const alabRaw = raw.alab_score;
+  const oppRaw = raw.opponent_score;
+  const alabScore =
+    alabRaw !== null && alabRaw !== undefined && String(alabRaw).trim() !== ""
+      ? Number(alabRaw)
+      : null;
+  const oppScore =
+    oppRaw !== null && oppRaw !== undefined && String(oppRaw).trim() !== ""
+      ? Number(oppRaw)
+      : null;
+
+  const ageCategory = String(raw.age_category ?? "").trim();
+  const rawHome = String(raw.home_team ?? raw.team_a ?? "").trim();
+  const rawOpp = String(raw.opponent ?? raw.opponent_name ?? raw.team_b ?? "").trim();
+
+  let homeTeam = rawHome;
+  let opponent = rawOpp;
+
+  if (!homeTeam && /\s+vs\.?\s+/i.test(rawOpp)) {
+    const splitMatch = rawOpp.match(/^(.+?)\s+vs\.?\s+(.+)$/i);
+    if (splitMatch) {
+      homeTeam = splitMatch[1].trim();
+      opponent = splitMatch[2].trim();
+    }
+  }
+
+  if (!homeTeam) {
+    homeTeam = ageCategory ? `ALAB FC ${ageCategory}` : "ALAB FC";
+  }
+
+  return {
+    id: Number(raw.id ?? raw.match_id ?? 0),
+    tournament_id: Number(raw.tournament_id ?? fallbackTournamentId),
+    age_category: ageCategory,
+    game_label: String(raw.game_label ?? raw.round ?? "Game").trim(),
+    home_team: homeTeam,
+    opponent: opponent || "TBA",
+    match_date: normalizeRecordDate(raw.match_date ?? raw.date),
+    match_time: normalizeMatchTime(raw.match_time ?? raw.kickoff_time ?? raw.time),
+    pitch: String(raw.pitch ?? raw.field ?? "").trim(),
+    alab_score: alabScore !== null && !Number.isNaN(alabScore) ? alabScore : null,
+    opponent_score: oppScore !== null && !Number.isNaN(oppScore) ? oppScore : null,
+    status: String(raw.status ?? "Scheduled").trim() || "Scheduled",
+    remarks: String(raw.remarks ?? raw.notes ?? "").trim(),
+  };
+}
+
+function normalizeTournamentRosterItem(
+  raw: Record<string, unknown>,
+  fallbackTournamentId = 0
+): TournamentRosterItem {
+  const nestedPlayer =
+    raw.player && typeof raw.player === "object"
+      ? (raw.player as Record<string, unknown>)
+      : raw.user && typeof raw.user === "object"
+      ? (raw.user as Record<string, unknown>)
+      : null;
+  const nestedProfile =
+    raw.player_profile && typeof raw.player_profile === "object"
+      ? (raw.player_profile as Record<string, unknown>)
+      : nestedPlayer?.player_profile && typeof nestedPlayer.player_profile === "object"
+      ? (nestedPlayer.player_profile as Record<string, unknown>)
+      : raw.profile && typeof raw.profile === "object"
+      ? (raw.profile as Record<string, unknown>)
+      : null;
+
+  const first = String(
+    raw.first_name ?? nestedProfile?.first_name ?? nestedPlayer?.first_name ?? ""
+  ).trim();
+  const last = String(
+    raw.last_name ?? nestedProfile?.last_name ?? nestedPlayer?.last_name ?? ""
+  ).trim();
+  const rawFull = String(
+    raw.full_name ?? raw.player_name ?? nestedProfile?.full_name ?? nestedPlayer?.full_name ?? ""
+  ).trim();
+  const full = rawFull || [first, last].filter(Boolean).join(" ");
+
+  const jerseyRaw =
+    raw.jersey_number ?? nestedProfile?.jersey_number ?? nestedPlayer?.jersey_number ?? null;
+  const jersey = jerseyRaw !== null && jerseyRaw !== undefined ? Number(jerseyRaw) : null;
+
+  const playerUserId = Number(
+    raw.player_user_id ?? nestedPlayer?.user_id ?? nestedPlayer?.id ?? 0
+  );
+
+  return {
+    id: Number(raw.id ?? raw.roster_id ?? 0),
+    tournament_id: Number(raw.tournament_id ?? fallbackTournamentId),
+    player_user_id: !Number.isNaN(playerUserId) ? playerUserId : 0,
+    first_name: first || full.split(/\s+/)[0] || "",
+    last_name: last || full.split(/\s+/).slice(1).join(" ") || "",
+    full_name: full || `Player #${playerUserId}`,
+    age_category: String(
+      raw.age_category ?? nestedProfile?.age_category ?? nestedPlayer?.age_category ?? ""
+    ).trim(),
+    position: String(
+      raw.position ?? nestedProfile?.position ?? nestedPlayer?.position ?? ""
+    ).trim(),
+    jersey_number: jersey !== null && !Number.isNaN(jersey) ? jersey : null,
+    parent_consent: Boolean(raw.parent_consent),
+    remarks: String(raw.remarks ?? raw.notes ?? "").trim(),
+  };
+}
+
+function normalizeTournamentItem(raw: Record<string, unknown>): TournamentItem {
+  const id = Number(raw.id ?? raw.tournament_id ?? 0);
+  const fee = Number(raw.registration_fee ?? raw.fee ?? 0);
+  const cats = parseAgeCategories(raw.age_categories ?? raw.categories ?? raw.age_category);
+  const matchesArr = asObjectArray(raw.matches);
+  const rostersArr = asObjectArray(raw.rosters ?? raw.roster);
+
+  return {
+    id,
+    title: String(raw.title ?? raw.name ?? raw.tournament_name ?? `Tournament #${id}`).trim(),
+    description: String(raw.description ?? "").trim(),
+    venue: String(raw.venue ?? raw.location ?? "TBA").trim(),
+    start_date: normalizeRecordDate(raw.start_date ?? raw.date),
+    end_date: normalizeRecordDate(raw.end_date ?? raw.start_date ?? raw.date),
+    age_categories: cats,
+    status: String(raw.status ?? "Upcoming").trim() || "Upcoming",
+    registration_fee: Number.isNaN(fee) ? 0 : fee,
+    match_count: Number(raw.match_count ?? matchesArr.length) || 0,
+    roster_count: Number(raw.roster_count ?? rostersArr.length) || 0,
+  };
+}
+
+export async function fetchTournaments(params?: {
+  status?: string;
+  age_category?: string;
+}): Promise<ApiResult<TournamentItem[]>> {
+  const qs = new URLSearchParams();
+  if (params?.status && params.status !== "all") qs.set("status", params.status);
+  if (params?.age_category && params.age_category !== "all") {
+    qs.set("age_category", params.age_category);
+  }
+  const query = qs.toString();
+  const url = query ? `${DASHBOARD_ENDPOINTS.tournaments}?${query}` : DASHBOARD_ENDPOINTS.tournaments;
+
+  const token = getAuthToken();
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const res = await parseApiResponse<unknown>(response, "GET", url);
+    if (!res.ok) return { ...res, data: [] };
+
+    const rawList = Array.isArray(res.data)
+      ? res.data
+      : res.data && typeof res.data === "object"
+      ? (res.data as Record<string, unknown>).tournaments ??
+        (res.data as Record<string, unknown>).data ??
+        []
+      : [];
+
+    return { ...res, data: asObjectArray(rawList).map(normalizeTournamentItem) };
+  } catch (error) {
+    console.error("Failed to fetch tournaments:", error);
+    return {
+      ok: false,
+      status: 0,
+      data: [],
+      message: `Unable to reach ${API_BASE_URL}. Make sure your backend server is running.`,
+    };
+  }
+}
+
+export async function fetchTournamentDetail(
+  id: number | string,
+  ageCategory?: string
+): Promise<ApiResult<TournamentDetail | null>> {
+  const base = DASHBOARD_ENDPOINTS.tournamentById(id);
+  const url =
+    ageCategory && ageCategory !== "all"
+      ? `${base}?age_category=${encodeURIComponent(ageCategory)}`
+      : base;
+
+  const token = getAuthToken();
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const res = await parseApiResponse<Record<string, unknown>>(response, "GET", url);
+    if (!res.ok || !res.data || typeof res.data !== "object") {
+      return { ...res, data: null };
+    }
+
+    const root =
+      res.data.data && typeof res.data.data === "object" && !Array.isArray(res.data.data)
+        ? (res.data.data as Record<string, unknown>)
+        : res.data;
+
+    const tournamentRaw =
+      root.tournament && typeof root.tournament === "object"
+        ? (root.tournament as Record<string, unknown>)
+        : root;
+
+    const baseItem = normalizeTournamentItem({
+      ...tournamentRaw,
+      age_categories:
+        root.age_categories ?? tournamentRaw.age_categories ?? tournamentRaw.categories,
+    });
+
+    const matches = asObjectArray(root.matches ?? tournamentRaw.matches).map((m) =>
+      normalizeTournamentMatch(m, baseItem.id)
+    );
+
+    const matchesByCat: Record<string, TournamentMatch[]> = {};
+    const rawGrouped = root.matches_by_category;
+    if (rawGrouped && typeof rawGrouped === "object" && !Array.isArray(rawGrouped)) {
+      for (const [cat, list] of Object.entries(rawGrouped as Record<string, unknown>)) {
+        matchesByCat[cat] = asObjectArray(list).map((m) =>
+          normalizeTournamentMatch(m, baseItem.id)
+        );
+      }
+    } else {
+      for (const m of matches) {
+        const key = m.age_category || "General";
+        if (!matchesByCat[key]) matchesByCat[key] = [];
+        matchesByCat[key].push(m);
+      }
+    }
+
+    const rosters = asObjectArray(
+      root.rosters ?? root.roster ?? tournamentRaw.rosters ?? tournamentRaw.roster
+    ).map((r) => normalizeTournamentRosterItem(r, baseItem.id));
+
+    // Merge any category discovered from matches/rosters into age_categories
+    const catSet = new Set(baseItem.age_categories);
+    for (const m of matches) if (m.age_category) catSet.add(m.age_category);
+    for (const key of Object.keys(matchesByCat)) if (key) catSet.add(key);
+
+    return {
+      ...res,
+      data: {
+        ...baseItem,
+        age_categories: Array.from(catSet),
+        match_count: matches.length,
+        roster_count: rosters.length,
+        matches,
+        matches_by_category: matchesByCat,
+        rosters,
+      },
+    };
+  } catch (error) {
+    console.error("Failed to fetch tournament detail:", error);
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      message: `Unable to reach ${API_BASE_URL}.`,
+    };
+  }
+}
+
+export async function createTournament(payload: CreateTournamentPayload) {
+  return authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.tournaments, {
+    method: "POST",
+    body: {
+      title: payload.title.trim(),
+      description: (payload.description ?? "").trim(),
+      venue: payload.venue.trim(),
+      start_date: payload.start_date,
+      end_date: payload.end_date || payload.start_date,
+      age_categories: payload.age_categories,
+      status: payload.status || "Upcoming",
+      registration_fee: Number(payload.registration_fee ?? 0) || 0,
+      ...(payload.matches && payload.matches.length > 0
+        ? {
+            matches: payload.matches.map((m) => ({
+              age_category: m.age_category.trim(),
+              game_label: m.game_label.trim(),
+              ...(m.home_team?.trim() ? { home_team: m.home_team.trim() } : {}),
+              opponent: encodeOpponentForBackend(m.home_team, m.opponent, m.age_category),
+              match_date: m.match_date,
+              match_time: ensureHHMMSS(m.match_time),
+              pitch: (m.pitch ?? "").trim(),
+              remarks: (m.remarks ?? "").trim(),
+            })),
+          }
+        : {}),
+    },
+  });
+}
+
+export async function updateTournament(
+  id: number | string,
+  payload: Partial<CreateTournamentPayload>
+) {
+  return authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.tournamentById(id), {
+    method: "PUT",
+    body: {
+      ...(payload.title !== undefined ? { title: payload.title.trim() } : {}),
+      ...(payload.description !== undefined ? { description: payload.description.trim() } : {}),
+      ...(payload.venue !== undefined ? { venue: payload.venue.trim() } : {}),
+      ...(payload.start_date !== undefined ? { start_date: payload.start_date } : {}),
+      ...(payload.end_date !== undefined ? { end_date: payload.end_date } : {}),
+      ...(payload.age_categories !== undefined ? { age_categories: payload.age_categories } : {}),
+      ...(payload.status !== undefined ? { status: payload.status } : {}),
+      ...(payload.registration_fee !== undefined
+        ? { registration_fee: Number(payload.registration_fee) || 0 }
+        : {}),
+    },
+  });
+}
+
+export async function deleteTournament(id: number | string) {
+  return authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.tournamentById(id), {
+    method: "DELETE",
+  });
+}
+
+export async function addTournamentMatches(
+  tournamentId: number | string,
+  matches: CreateMatchPayload[]
+) {
+  const formatted = matches.map((m) => ({
+    age_category: m.age_category.trim(),
+    game_label: m.game_label.trim(),
+    ...(m.home_team?.trim() ? { home_team: m.home_team.trim() } : {}),
+    opponent: encodeOpponentForBackend(m.home_team, m.opponent, m.age_category),
+    match_date: m.match_date,
+    match_time: ensureHHMMSS(m.match_time),
+    pitch: (m.pitch ?? "").trim(),
+    remarks: (m.remarks ?? "").trim(),
+  }));
+
+  const body: Record<string, unknown> =
+    formatted.length === 1 ? formatted[0] : { matches: formatted };
+
+  return authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.tournamentMatches(tournamentId), {
+    method: "POST",
+    body,
+  });
+}
+
+export async function updateTournamentMatch(
+  matchId: number | string,
+  payload: UpdateMatchPayload
+) {
+  const encodedOpponent =
+    payload.opponent !== undefined
+      ? encodeOpponentForBackend(payload.home_team, payload.opponent, payload.age_category)
+      : undefined;
+
+  return authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.tournamentMatchById(matchId), {
+    method: "PUT",
+    body: {
+      ...(payload.age_category !== undefined ? { age_category: payload.age_category.trim() } : {}),
+      ...(payload.game_label !== undefined ? { game_label: payload.game_label.trim() } : {}),
+      ...(payload.home_team !== undefined ? { home_team: payload.home_team.trim() } : {}),
+      ...(encodedOpponent !== undefined ? { opponent: encodedOpponent } : {}),
+      ...(payload.match_date !== undefined ? { match_date: payload.match_date } : {}),
+      ...(payload.match_time !== undefined ? { match_time: ensureHHMMSS(payload.match_time) } : {}),
+      ...(payload.pitch !== undefined ? { pitch: payload.pitch.trim() } : {}),
+      ...(payload.alab_score !== undefined ? { alab_score: payload.alab_score } : {}),
+      ...(payload.opponent_score !== undefined ? { opponent_score: payload.opponent_score } : {}),
+      ...(payload.status !== undefined ? { status: payload.status } : {}),
+      ...(payload.remarks !== undefined ? { remarks: payload.remarks.trim() } : {}),
+    },
+  });
+}
+
+export async function deleteTournamentMatch(matchId: number | string) {
+  return authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.tournamentMatchById(matchId), {
+    method: "DELETE",
+  });
+}
+
+export async function addPlayersToTournamentRoster(
+  tournamentId: number | string,
+  payload: { player_user_ids: number[]; remarks?: string }
+) {
+  return authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.tournamentRoster(tournamentId), {
+    method: "POST",
+    body: {
+      player_user_ids: Array.from(new Set(payload.player_user_ids)).filter(
+        (id) => Number.isInteger(id) && id > 0
+      ),
+      remarks: (payload.remarks ?? "").trim(),
+    },
+  });
+}
+
+export async function updateRosterParentConsent(
+  rosterId: number | string,
+  payload: { parent_consent: boolean; remarks?: string }
+) {
+  return authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.tournamentRosterConsent(rosterId), {
+    method: "PATCH",
+    body: {
+      parent_consent: payload.parent_consent,
+      ...(payload.remarks !== undefined ? { remarks: payload.remarks.trim() } : {}),
+    },
+  });
+}
+
+export async function removeRosterPlayer(rosterId: number | string) {
+  return authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.tournamentRosterById(rosterId), {
+    method: "DELETE",
+  });
 }

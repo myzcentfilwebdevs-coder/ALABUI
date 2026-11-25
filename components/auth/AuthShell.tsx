@@ -30,21 +30,21 @@ export default function AuthShell({ title, subtitle, icon, children, footer }: A
         <div className="pointer-events-none absolute -bottom-24 -left-24 h-80 w-80 rounded-full bg-orange-500/30 blur-3xl" />
         <div className="pointer-events-none absolute right-1/3 top-10 h-72 w-72 rounded-full bg-blue-500/25 blur-3xl" />
 
-        <div className="relative mx-auto grid w-full max-w-7xl items-center gap-6 px-4 py-4 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10 lg:py-3">
+        <div className="relative mx-auto grid w-full max-w-7xl items-center gap-4 px-3.5 py-4 sm:gap-6 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10 lg:py-3">
           {/* Hero */}
           <section className="text-center lg:text-left">
             <Image
               src={wordmark}
               alt="ALAB Football Club — Keep the fire burning"
               priority
-              className="mx-auto w-full max-w-md drop-shadow-[0_10px_40px_rgba(37,99,235,0.5)] xl:max-w-lg lg:mx-0"
+              className="mx-auto w-full max-w-[240px] drop-shadow-[0_10px_40px_rgba(37,99,235,0.5)] sm:max-w-md xl:max-w-lg lg:mx-0"
             />
-            <p className="mx-auto mt-3 max-w-md text-base font-semibold leading-snug text-blue-50 lg:mx-0 lg:pl-4">
+            <p className="mx-auto mt-2 max-w-md text-sm font-semibold leading-snug text-blue-50 sm:mt-3 sm:text-base lg:mx-0 lg:pl-4">
               Be part of our growing football family.
               <br />
               Register now and play with pride!
             </p>
-            <ul className="mt-5 flex flex-wrap justify-center gap-5 sm:gap-8 lg:justify-start lg:pl-4">
+            <ul className="mt-3.5 hidden flex-wrap justify-center gap-5 sm:mt-5 sm:flex sm:gap-8 lg:justify-start lg:pl-4">
               {FEATURES.map(({ label, Icon }) => (
                 <li key={label} className="flex flex-col items-center gap-1.5">
                   <span className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-blue-300/80 bg-blue-600/30 shadow-[0_0_20px_rgba(59,130,246,0.65)]">

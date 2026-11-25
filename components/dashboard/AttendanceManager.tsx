@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import crest from "@/app/logo/logoALAB.png";
+import stadiumBg from "@/app/logo/backgoundimage.png";
 import {
   fetchAllAttendanceHistory,
   fetchDailyAttendance,
@@ -28,6 +29,8 @@ import {
 } from "@/components/icons";
 import AddPlayerModal from "./AddPlayerModal";
 import PlayerAttendanceDetail, { type PlayerAttendanceSummaryItem } from "./PlayerAttendanceDetail";
+import CustomSelect from "@/components/ui/CustomSelect";
+import CustomDatePicker from "@/components/ui/CustomDatePicker";
 
 type ViewMode = "daily" | "history-month" | "history-all";
 type StatusFilter = "all" | "Present" | "Late" | "Absent" | "Excused" | "unmarked";
@@ -363,32 +366,6 @@ export default function AttendanceManager({
     }
   }
 
-  async function handleQuickToggleStatus(row: (typeof allRows)[number]) {
-    if (!canRecord || saving) return;
-    const nextStatus: Exclude<AttendanceStatus, ""> =
-      row.status === "Present" ? "Absent" : "Present";
-
-    setSaving(true);
-    const res = await markSingleDailyAttendance({
-      date,
-      player_user_id: row.player_user_id,
-      status: nextStatus,
-      remarks: row.rawDaily?.remarks ?? "",
-    });
-    setSaving(false);
-
-    if (res.ok) {
-      setToast({
-        type: "success",
-        message: `${row.last_name}, ${row.first_name} marked as ${nextStatus}.`,
-      });
-      await loadData();
-      if (onAttendanceChanged) onAttendanceChanged();
-    } else {
-      setToast({ type: "error", message: res.message || "Failed to update status." });
-    }
-  }
-
   async function handleBulkMark(status: Exclude<AttendanceStatus, "">) {
     if (!canRecord || selectedIds.size === 0 || saving) return;
     const records = Array.from(selectedIds).map((id) => ({
@@ -501,8 +478,17 @@ export default function AttendanceManager({
       ) : (
         <>
           {/* ==================== TOP ATTENDANCE HERO BANNER ==================== */}
-      <div className="relative overflow-hidden rounded-2xl border border-sky-400/35 bg-gradient-to-r from-[#082266] via-[#0b3194] to-[#06184a] p-5 shadow-[0_14px_40px_-14px_rgba(37,99,235,0.5)]">
-        <div className="pointer-events-none absolute -right-10 -top-12 h-44 w-44 rounded-full bg-sky-400/20 blur-3xl" />
+      <div className="relative overflow-hidden rounded-2xl border border-sky-400/35 bg-[#06184c] p-5 shadow-[0_16px_44px_-14px_rgba(37,99,235,0.55)]">
+        <Image
+          src={stadiumBg}
+          alt=""
+          fill
+          priority
+          sizes="(max-width: 1280px) 100vw, 1152px"
+          className="pointer-events-none object-cover object-right opacity-85"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#041038]/92 via-[#072066]/65 to-[#040f33]/55" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-300/60 to-transparent" />
 
         <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -624,8 +610,8 @@ export default function AttendanceManager({
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                <div className="relative w-full sm:w-56">
                   <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-blue-300/65" />
                   <input
                     type="search"
@@ -635,35 +621,33 @@ export default function AttendanceManager({
                       setPage(1);
                     }}
                     placeholder="Search player name or ID..."
-                    className="w-48 rounded-lg border border-blue-400/25 bg-[#040f30]/90 py-1.5 pl-8 pr-3 text-xs text-white placeholder:text-blue-300/50 focus:border-sky-400 focus:outline-none sm:w-56"
+                    className="w-full rounded-lg border border-blue-400/25 bg-[#040f30]/90 py-2 pl-8 pr-3 text-xs text-white placeholder:text-blue-300/50 focus:border-sky-400 focus:outline-none sm:py-1.5"
                   />
                 </div>
 
-                <select
-                  aria-label="Team filter"
+                <CustomSelect
+                  ariaLabel="Team filter"
+                  size="sm"
                   value={teamFilter}
-                  onChange={(e) => {
-                    setTeamFilter(e.target.value);
-                    setDraftTeam(e.target.value);
+                  onChange={(val) => {
+                    setTeamFilter(val);
+                    setDraftTeam(val);
                     setPage(1);
                   }}
-                  className="rounded-lg border border-blue-400/25 bg-[#040f30]/90 px-3 py-1.5 text-xs font-semibold text-blue-100 focus:border-sky-400 focus:outline-none"
-                >
-                  <option value="all" className="bg-[#051238]">
-                    All Teams
-                  </option>
-                  {divisionOptions.map((div) => (
-                    <option key={div} value={div} className="bg-[#051238]">
-                      {div}
-                    </option>
-                  ))}
-                </select>
+                  leadingIcon={<UsersIcon className="h-3.5 w-3.5" />}
+                  className="flex-1 sm:w-36 sm:flex-none"
+                  menuMinWidth={155}
+                  options={[
+                    { value: "all", label: "All Teams" },
+                    ...divisionOptions.map((div) => ({ value: div, label: div })),
+                  ]}
+                />
 
                 <button
                   type="button"
                   onClick={handleDownloadCsv}
                   disabled={filteredRows.length === 0}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 px-3.5 py-1.5 text-xs font-bold text-white shadow-[0_0_14px_rgba(37,99,235,0.5)] transition hover:from-blue-500 hover:to-sky-500 disabled:opacity-50"
+                  className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 px-3.5 py-2 text-xs font-bold text-white shadow-[0_0_14px_rgba(37,99,235,0.5)] transition hover:from-blue-500 hover:to-sky-500 disabled:opacity-50 sm:flex-none sm:py-1.5"
                 >
                   <DownloadIcon className="h-3.5 w-3.5" />
                   Download
@@ -734,8 +718,116 @@ export default function AttendanceManager({
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs sm:text-sm">
+              <>
+                {/* Mobile Attendance Card View (< md) */}
+                <div className="divide-y divide-blue-400/15 md:hidden">
+                  {paginatedRows.map((row) => {
+                    const checked = selectedIds.has(row.player_user_id);
+                    const displayName =
+                      row.last_name && row.first_name
+                        ? `${row.last_name}, ${row.first_name}`
+                        : `${row.first_name} ${row.last_name}`.trim() ||
+                          `Player #${row.player_user_id}`;
+
+                    return (
+                      <div
+                        key={`mob-att-${row.player_user_id}`}
+                        className={`space-y-3 p-4 ${checked ? "bg-blue-600/15" : ""}`}
+                      >
+                        <div className="flex items-start justify-between gap-2.5">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${displayName}`}
+                              checked={checked}
+                              onChange={() => toggleSelectRow(row.player_user_id)}
+                              className="h-4 w-4 shrink-0 rounded border-blue-400/40 bg-transparent accent-blue-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => openHistoryModal(row)}
+                              className="flex min-w-0 items-center gap-2.5 text-left"
+                            >
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-sky-400/35 bg-gradient-to-br from-blue-600/80 to-sky-500/70 text-[11px] font-bold text-white">
+                                {getInitials(row.first_name, row.last_name)}
+                              </span>
+                              <div className="min-w-0 leading-tight">
+                                <p className="truncate text-sm font-bold text-white">{displayName}</p>
+                                <p className="mt-0.5 text-[11px] text-blue-200/70">
+                                  {[row.age_category || "ALAB", row.position || "Player"]
+                                    .filter(Boolean)
+                                    .join(" • ")}
+                                </p>
+                              </div>
+                            </button>
+                          </div>
+
+                          <span
+                            className={`inline-flex shrink-0 select-none items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${statusPillBadge(row.status)}`}
+                          >
+                            {row.status ? (
+                              <>
+                                <span>{STATUS_META[row.status].symbol}</span>
+                                <span>{row.status}</span>
+                              </>
+                            ) : (
+                              <span>Unmarked</span>
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 text-xs text-blue-200/75">
+                          <span>
+                            {viewMode === "daily"
+                              ? `Check In: ${formatTime(row.check_in_time)}`
+                              : `Rate: ${row.attendance_rate ?? 0}%`}
+                          </span>
+                          {row.remarks && <span className="truncate">{row.remarks}</span>}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openHistoryModal(row)}
+                            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-sky-500 px-3 py-2 text-xs font-bold text-white"
+                          >
+                            <HistoryIcon className="h-3.5 w-3.5" />
+                            Calendar
+                          </button>
+                          {canRecord && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openEditModal(
+                                  row.rawDaily ?? {
+                                    player_user_id: row.player_user_id,
+                                    first_name: row.first_name,
+                                    last_name: row.last_name,
+                                    jersey_number: row.jersey_number,
+                                    age_category: row.age_category,
+                                    position: row.position,
+                                    status: row.status,
+                                    attended: row.attended,
+                                    check_in_time: row.check_in_time,
+                                    remarks: row.remarks,
+                                  }
+                                )
+                              }
+                              className="inline-flex items-center justify-center gap-1 rounded-xl border border-sky-400/40 bg-sky-500/15 px-3.5 py-2 text-xs font-bold text-sky-200"
+                            >
+                              <EditIcon className="h-3.5 w-3.5" />
+                              Edit
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Desktop Table View (>= md) */}
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full text-left text-xs sm:text-sm">
                   <thead>
                     <tr className="border-b border-blue-400/15 bg-blue-950/60 text-[11px] font-semibold uppercase tracking-wider text-blue-200/75">
                       <th className="w-10 py-3 pl-5 pr-2">
@@ -812,14 +904,8 @@ export default function AttendanceManager({
                             </div>
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap">
-                            <button
-                              type="button"
-                              disabled={!canRecord || saving}
-                              title={canRecord ? "Click to quick-toggle Present / Absent" : undefined}
-                              onClick={() => void handleQuickToggleStatus(row)}
-                              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold transition ${
-                                canRecord ? "cursor-pointer hover:brightness-115" : "cursor-default"
-                              } ${statusPillBadge(row.status)}`}
+                            <span
+                              className={`inline-flex select-none items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${statusPillBadge(row.status)}`}
                             >
                               {row.status ? (
                                 <>
@@ -829,7 +915,7 @@ export default function AttendanceManager({
                               ) : (
                                 <span>Unmarked</span>
                               )}
-                            </button>
+                            </span>
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap text-xs font-medium text-blue-100/85">
                             {viewMode === "daily" ? (
@@ -885,7 +971,8 @@ export default function AttendanceManager({
                     })}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </>
             )}
 
             {/* Table Pagination Footer */}
@@ -936,21 +1023,21 @@ export default function AttendanceManager({
 
               <div className="flex items-center gap-2">
                 <span>Items per page:</span>
-                <select
-                  aria-label="Items per page"
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
+                <CustomSelect
+                  ariaLabel="Items per page"
+                  size="xs"
+                  value={String(pageSize)}
+                  onChange={(val) => {
+                    setPageSize(Number(val));
                     setPage(1);
                   }}
-                  className="rounded-lg border border-blue-400/25 bg-[#040f30] px-2 py-1 text-xs font-bold text-white focus:border-sky-400 focus:outline-none"
-                >
-                  {[8, 15, 25, 50].map((n) => (
-                    <option key={n} value={n} className="bg-[#051238]">
-                      {n}
-                    </option>
-                  ))}
-                </select>
+                  className="w-[70px]"
+                  menuMinWidth={88}
+                  options={[8, 15, 25, 50].map((n) => ({
+                    value: String(n),
+                    label: String(n),
+                  }))}
+                />
               </div>
             </div>
           </div>
@@ -966,14 +1053,16 @@ export default function AttendanceManager({
             </div>
 
             <div>
-              <label className="mb-1 block text-[11px] font-semibold text-blue-200/80">Date</label>
-              <input
-                type="date"
+              <label className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-blue-200/85">
+                <CalendarIcon className="h-3.5 w-3.5 text-sky-400" />
+                Date
+              </label>
+              <CustomDatePicker
+                ariaLabel="Filter date"
+                size="sm"
                 value={draftDate}
-                onChange={(e) => {
-                  if (e.target.value) setDraftDate(e.target.value);
-                }}
-                className="w-full rounded-xl border border-blue-400/25 bg-[#040f30]/90 px-3 py-2 text-xs font-semibold text-white focus:border-sky-400 focus:outline-none [color-scheme:dark]"
+                onChange={(val) => setDraftDate(val || today)}
+                clearFallback={today}
               />
             </div>
 
@@ -981,67 +1070,78 @@ export default function AttendanceManager({
               <label className="mb-1 block text-[11px] font-semibold text-blue-200/80">
                 Session View
               </label>
-              <select
+              <CustomSelect
+                ariaLabel="Session view"
+                size="sm"
                 value={draftViewMode}
-                onChange={(e) => setDraftViewMode(e.target.value as ViewMode)}
-                className="w-full rounded-xl border border-blue-400/25 bg-[#040f30]/90 px-3 py-2 text-xs font-semibold text-white focus:border-sky-400 focus:outline-none"
-              >
-                <option value="daily" className="bg-[#051238]">
-                  Daily Session
-                </option>
-                <option value="history-month" className="bg-[#051238]">
-                  Monthly History
-                </option>
-                <option value="history-all" className="bg-[#051238]">
-                  All-Time History
-                </option>
-              </select>
+                onChange={(val) => setDraftViewMode(val as ViewMode)}
+                leadingIcon={<HistoryIcon className="h-3.5 w-3.5" />}
+                className="w-full"
+                options={[
+                  { value: "daily", label: "Daily Session" },
+                  { value: "history-month", label: "Monthly History" },
+                  { value: "history-all", label: "All-Time History" },
+                ]}
+              />
             </div>
 
             <div>
               <label className="mb-1 block text-[11px] font-semibold text-blue-200/80">Team</label>
-              <select
+              <CustomSelect
+                ariaLabel="Filter team"
+                size="sm"
                 value={draftTeam}
-                onChange={(e) => setDraftTeam(e.target.value)}
-                className="w-full rounded-xl border border-blue-400/25 bg-[#040f30]/90 px-3 py-2 text-xs font-semibold text-white focus:border-sky-400 focus:outline-none"
-              >
-                <option value="all" className="bg-[#051238]">
-                  All Teams
-                </option>
-                {divisionOptions.map((div) => (
-                  <option key={div} value={div} className="bg-[#051238]">
-                    {div}
-                  </option>
-                ))}
-              </select>
+                onChange={setDraftTeam}
+                leadingIcon={<UsersIcon className="h-3.5 w-3.5" />}
+                className="w-full"
+                options={[
+                  { value: "all", label: "All Teams" },
+                  ...divisionOptions.map((div) => ({ value: div, label: div })),
+                ]}
+              />
             </div>
 
             <div>
               <label className="mb-1 block text-[11px] font-semibold text-blue-200/80">Status</label>
-              <select
+              <CustomSelect
+                ariaLabel="Filter status"
+                size="sm"
                 value={draftStatus}
-                onChange={(e) => setDraftStatus(e.target.value as StatusFilter)}
-                className="w-full rounded-xl border border-blue-400/25 bg-[#040f30]/90 px-3 py-2 text-xs font-semibold text-white focus:border-sky-400 focus:outline-none"
-              >
-                <option value="all" className="bg-[#051238]">
-                  All Status
-                </option>
-                <option value="Present" className="bg-[#051238]">
-                  Present
-                </option>
-                <option value="Late" className="bg-[#051238]">
-                  Late
-                </option>
-                <option value="Absent" className="bg-[#051238]">
-                  Absent
-                </option>
-                <option value="Excused" className="bg-[#051238]">
-                  Excused
-                </option>
-                <option value="unmarked" className="bg-[#051238]">
-                  Unmarked
-                </option>
-              </select>
+                onChange={(val) => setDraftStatus(val as StatusFilter)}
+                className="w-full"
+                options={[
+                  {
+                    value: "all",
+                    label: "All Status",
+                    icon: <FilterIcon className="h-3.5 w-3.5" />,
+                  },
+                  {
+                    value: "Present",
+                    label: "Present",
+                    icon: <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />,
+                  },
+                  {
+                    value: "Late",
+                    label: "Late",
+                    icon: <span className="h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]" />,
+                  },
+                  {
+                    value: "Absent",
+                    label: "Absent",
+                    icon: <span className="h-2.5 w-2.5 rounded-full bg-rose-400 shadow-[0_0_8px_#fb7185]" />,
+                  },
+                  {
+                    value: "Excused",
+                    label: "Excused",
+                    icon: <span className="h-2.5 w-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]" />,
+                  },
+                  {
+                    value: "unmarked",
+                    label: "Unmarked",
+                    icon: <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />,
+                  },
+                ]}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-2 pt-1">
@@ -1131,20 +1231,9 @@ export default function AttendanceManager({
             </div>
 
             <div className="rounded-xl border border-blue-400/20 bg-blue-950/60 p-3 text-[11px] leading-relaxed text-blue-200/80">
-              Attendance records are automatically saved. Click any status badge or pencil icon to
-              edit anytime.
+              Attendance records are automatically saved. Use the pencil icon or Mark Attendance to
+              update anytime.
             </div>
-
-            {canAddPlayer && (
-              <button
-                type="button"
-                onClick={() => setAddPlayerOpen(true)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-sky-400/35 bg-sky-500/15 py-2 text-xs font-bold text-sky-200 transition hover:bg-sky-500/25"
-              >
-                <PlusIcon className="h-3.5 w-3.5" />
-                Add New Player
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -1184,28 +1273,20 @@ export default function AttendanceManager({
                   <label className="mb-1 block text-xs font-semibold text-blue-200">
                     Select Player
                   </label>
-                  <select
-                    value={modalPlayerId}
-                    onChange={(e) => setModalPlayerId(Number(e.target.value))}
-                    className="w-full rounded-xl border border-blue-400/25 bg-[#040f30] px-3.5 py-2.5 text-sm text-white focus:border-sky-400 focus:outline-none"
-                  >
-                    {(daily?.players ?? []).length === 0 ? (
-                      <option value={0} className="bg-[#051238]">
-                        No players available — add a player first
-                      </option>
-                    ) : (
-                      (daily?.players ?? []).map((p) => (
-                        <option
-                          key={p.player_user_id}
-                          value={p.player_user_id}
-                          className="bg-[#051238]"
-                        >
-                          {p.jersey_number !== null ? `#${p.jersey_number} ` : ""}
-                          {p.first_name} {p.last_name} ({p.age_category || "ALAB"})
-                        </option>
-                      ))
-                    )}
-                  </select>
+                  <CustomSelect
+                    ariaLabel="Select player"
+                    value={String(modalPlayerId)}
+                    onChange={(val) => setModalPlayerId(Number(val))}
+                    leadingIcon={<UsersIcon className="h-4 w-4" />}
+                    placeholder="No players available — add a player first"
+                    disabled={(daily?.players ?? []).length === 0}
+                    className="w-full"
+                    options={(daily?.players ?? []).map((p) => ({
+                      value: String(p.player_user_id),
+                      label: `${p.jersey_number !== null ? `#${p.jersey_number} ` : ""}${p.first_name} ${p.last_name}`.trim(),
+                      sublabel: p.age_category || "ALAB FC",
+                    }))}
+                  />
                 </div>
               )}
 

@@ -248,6 +248,47 @@ export const ClockIcon = (p: IconProps) => (
     <path d="M12 7v5l3 2" />
   </Outline>
 );
+export const LinkIcon = (p: IconProps) => (
+  <Outline {...p}>
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+  </Outline>
+);
+export const UnlinkIcon = (p: IconProps) => (
+  <Outline {...p}>
+    <path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+    <path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    <path d="M8 2v3M2 8h3M16 19v3M19 16h3" />
+  </Outline>
+);
+export const ClipboardCheckIcon = (p: IconProps) => (
+  <Solid {...p}>
+    <path d="M9 2a1 1 0 0 0-1 1v1H6.5A2.5 2.5 0 0 0 4 6.5v13A2.5 2.5 0 0 0 6.5 22h11a2.5 2.5 0 0 0 2.5-2.5v-13A2.5 2.5 0 0 0 17.5 4H16V3a1 1 0 0 0-1-1H9Zm1 2h4v1h-4V4Zm5.7 7.3a1 1 0 0 1 0 1.4l-4.2 4.2a1 1 0 0 1-1.4 0l-2-2a1 1 0 1 1 1.4-1.4l1.3 1.3 3.5-3.5a1 1 0 0 1 1.4 0Z" />
+  </Solid>
+);
+export const MoreHorizontalIcon = (p: IconProps) => (
+  <Solid {...p}>
+    <circle cx="5" cy="12" r="1.7" />
+    <circle cx="12" cy="12" r="1.7" />
+    <circle cx="19" cy="12" r="1.7" />
+  </Solid>
+);
+export const ChevronLeftIcon = (p: IconProps) => (
+  <Outline {...p}>
+    <path d="M15 18l-6-6 6-6" />
+  </Outline>
+);
+export const ChevronRightIcon = (p: IconProps) => (
+  <Outline {...p}>
+    <path d="M9 18l6-6-6-6" />
+  </Outline>
+);
+export const TrashIcon = (p: IconProps) => (
+  <Outline {...p}>
+    <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6h12Z" />
+    <path d="M10 11v6M14 11v6" />
+  </Outline>
+);
 
 /* ---------- Navigation icons ---------- */
 export const HomeIcon = (p: IconProps) => (

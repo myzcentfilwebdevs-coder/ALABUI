@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { createPlayer } from "@/lib/api";
 import { CloseIcon, JerseyIcon, PlusIcon } from "@/components/icons";
+import CustomSelect from "@/components/ui/CustomSelect";
 
 const AGE_CATEGORIES = ["U-8", "U-10", "U-12", "U-14", "U-16", "U-18", "Senior"] as const;
 const POSITIONS = ["Forward", "Midfielder", "Defender", "Goalkeeper"] as const;
@@ -22,7 +23,7 @@ export default function AddPlayerModal({ open, onClose, onCreated }: AddPlayerMo
   const [position, setPosition] = useState<string>("Midfielder");
   const [jerseyNumber, setJerseyNumber] = useState<string>("");
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ status?: number; message: string; endpoint?: string } | null>(null);
 
   if (!open) return null;
 
@@ -31,13 +32,13 @@ export default function AddPlayerModal({ open, onClose, onCreated }: AddPlayerMo
     setError(null);
 
     if (!firstName.trim() || !lastName.trim()) {
-      setError("First name and last name are required.");
+      setError({ message: "First name and last name are required." });
       return;
     }
 
     const jerseyNum = Number(jerseyNumber);
     if (!jerseyNumber.trim() || !Number.isInteger(jerseyNum) || jerseyNum < 0 || jerseyNum > 99) {
-      setError("Enter a valid jersey number (0–99).");
+      setError({ message: "Enter a valid jersey number (0–99)." });
       return;
     }
 
@@ -59,15 +60,19 @@ export default function AddPlayerModal({ open, onClose, onCreated }: AddPlayerMo
       onCreated();
       onClose();
     } else {
-      setError(res.message || "Failed to add player.");
+      setError({
+        status: res.status,
+        message: res.message || "Failed to add player.",
+        endpoint: res.endpoint,
+      });
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs" onClick={onClose} />
-      <div className="dash-card relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-sky-400/35 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-blue-400/20 bg-gradient-to-r from-[#0a2368] to-[#07184a] px-5 py-4">
+      <div className="dash-card relative z-10 flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-sky-400/35 shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-blue-400/20 bg-gradient-to-r from-[#0a2368] to-[#07184a] px-4 py-3.5 sm:px-5 sm:py-4">
           <div className="flex items-center gap-3">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/25 text-sky-300 ring-1 ring-sky-400/35">
               <JerseyIcon className="h-5 w-5" />
@@ -87,10 +92,21 @@ export default function AddPlayerModal({ open, onClose, onCreated }: AddPlayerMo
           </button>
         </div>
 
-        <form method="post" onSubmit={handleSubmit} noValidate className="space-y-3.5 p-5">
+        <form method="post" onSubmit={handleSubmit} noValidate className="flex-1 space-y-3.5 overflow-y-auto p-4 sm:p-5">
           {error && (
-            <div className="rounded-xl border border-rose-400/40 bg-rose-500/15 px-3.5 py-2.5 text-xs font-medium text-rose-200">
-              {error}
+            <div
+              role="alert"
+              className="rounded-xl border border-rose-400/45 bg-rose-500/15 px-3.5 py-3 text-xs text-rose-100"
+            >
+              <div className="flex items-center gap-2 font-bold text-rose-200">
+                {error.status !== undefined && error.status > 0 && (
+                  <span className="rounded bg-rose-500/30 px-1.5 py-0.5 font-mono text-[10px] text-rose-100">
+                    HTTP {error.status}
+                  </span>
+                )}
+                <span>Unable to add player</span>
+              </div>
+              <p className="mt-1 leading-relaxed text-rose-200/90">{error.message}</p>
             </div>
           )}
 
@@ -122,48 +138,39 @@ export default function AddPlayerModal({ open, onClose, onCreated }: AddPlayerMo
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-semibold text-blue-200">Gender</label>
-              <select
+              <CustomSelect
+                ariaLabel="Gender"
                 value={gender}
-                onChange={(e) => setGender(e.target.value)}
-                className="w-full rounded-xl border border-blue-400/25 bg-[#040f30] px-3.5 py-2 text-sm text-white focus:border-sky-400 focus:outline-none"
-              >
-                {GENDERS.map((g) => (
-                  <option key={g} value={g} className="bg-[#051238]">
-                    {g}
-                  </option>
-                ))}
-              </select>
+                onChange={setGender}
+                options={GENDERS.map((g) => ({ value: g, label: g }))}
+                size="sm"
+                className="w-full"
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-blue-200">Age Category</label>
-              <select
+              <CustomSelect
+                ariaLabel="Age Category"
                 value={ageCategory}
-                onChange={(e) => setAgeCategory(e.target.value)}
-                className="w-full rounded-xl border border-blue-400/25 bg-[#040f30] px-3.5 py-2 text-sm text-white focus:border-sky-400 focus:outline-none"
-              >
-                {AGE_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat} className="bg-[#051238]">
-                    {cat}
-                  </option>
-                ))}
-              </select>
+                onChange={setAgeCategory}
+                options={AGE_CATEGORIES.map((cat) => ({ value: cat, label: cat }))}
+                size="sm"
+                className="w-full"
+              />
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-semibold text-blue-200">Position</label>
-              <select
+              <CustomSelect
+                ariaLabel="Position"
                 value={position}
-                onChange={(e) => setPosition(e.target.value)}
-                className="w-full rounded-xl border border-blue-400/25 bg-[#040f30] px-3.5 py-2 text-sm text-white focus:border-sky-400 focus:outline-none"
-              >
-                {POSITIONS.map((pos) => (
-                  <option key={pos} value={pos} className="bg-[#051238]">
-                    {pos}
-                  </option>
-                ))}
-              </select>
+                onChange={setPosition}
+                options={POSITIONS.map((pos) => ({ value: pos, label: pos }))}
+                size="sm"
+                className="w-full"
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-blue-200">Jersey Number</label>

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import crest from "@/app/logo/logoALAB.png";
 import alabBall from "@/app/logo/ball.png";
+import stadiumBg from "@/app/logo/backgoundimage.png";
 import {
   clearAuthToken,
   fetchDailyAttendance,
@@ -41,10 +42,14 @@ import {
 } from "@/components/icons";
 import RbacManager from "./RbacManager";
 import AttendanceManager from "./AttendanceManager";
+import PlayersManager from "./PlayersManager";
+import CustomSelect from "@/components/ui/CustomSelect";
+import ProfileManager from "./ProfileManager";
+import TournamentsManager from "./TournamentsManager";
 import AddPlayerModal from "./AddPlayerModal";
 
 type ActiveTab = "overview" | "rbac" | "no-access" | `group:${number}`;
-type ActivityFilter = "week" | "attendance" | "soa" | "all";
+type ActivityFilter = "week" | "attendance" | "all";
 
 function formatPeso(amount: unknown): string {
   const num = Number(amount ?? 0);
@@ -105,8 +110,11 @@ function ModuleIcon({ name, className }: { name: string; className?: string }) {
   return <BallIcon className={className} />;
 }
 
-function groupCategory(name: string): "tournaments" | "attendance" | "soa" | "players" | "generic" {
+function groupCategory(
+  name: string
+): "tournaments" | "attendance" | "soa" | "players" | "profile" | "generic" {
   const n = name.toLowerCase();
+  if (/profile|own\s*account|my\s*account/.test(n)) return "profile";
   if (/tournament|match|fixture|event/.test(n)) return "tournaments";
   if (/attendance|training|session/.test(n)) return "attendance";
   if (/soa|bill|payment|finance|fee/.test(n)) return "soa";
@@ -123,6 +131,9 @@ export default function DashboardClient() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("week");
   const [todayAttendanceSummary, setTodayAttendanceSummary] = useState<DailyAttendanceSummary | null>(null);
+  const [playerLookup, setPlayerLookup] = useState<
+    Record<number, { name: string; division: string }>
+  >({});
 
   const loadDashboard = useCallback(async () => {
     if (!getAuthToken()) {
@@ -145,7 +156,7 @@ export default function DashboardClient() {
       const session = res.data;
       setData(session);
 
-      // Also fetch today's live daily attendance summary for the Dashboard donut if permitted
+      // Also fetch today's live daily attendance summary + player names for Dashboard donut & Recent Activity
       const hasAttendanceAccess = session.access.modules.some((m) =>
         /attendance|training/i.test(m.name)
       );
@@ -153,10 +164,23 @@ export default function DashboardClient() {
         const dailyRes = await fetchDailyAttendance();
         if (dailyRes.ok && dailyRes.data) {
           setTodayAttendanceSummary(dailyRes.data.summary);
+          const lookup: Record<number, { name: string; division: string }> = {};
+          for (const p of dailyRes.data.players) {
+            const full = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+            if (p.player_user_id) {
+              lookup[p.player_user_id] = {
+                name: full || `Player #${p.player_user_id}`,
+                division: p.age_category || "",
+              };
+            }
+          }
+          setPlayerLookup(lookup);
         }
       }
 
-      const groups = groupModulesByParent(session.access.modules).filter(
+      const groups = groupModulesByParent(session.access.modules, {
+        collapseOrphans: true,
+      }).filter(
         (g) =>
           !/^dashboard$/i.test(g.parent.name.trim()) &&
           !/(rbac|role\s*access)/i.test(g.parent.name.trim())
@@ -188,7 +212,7 @@ export default function DashboardClient() {
   }, [loadDashboard]);
 
   const moduleGroups = useMemo(
-    () => groupModulesByParent(data?.access.modules ?? []),
+    () => groupModulesByParent(data?.access.modules ?? [], { collapseOrphans: true }),
     [data?.access.modules]
   );
 
@@ -237,11 +261,48 @@ export default function DashboardClient() {
 
     for (let i = 0; i < data.recent_attendance.length; i++) {
       const att = data.recent_attendance[i];
+      const nestedPlayer =
+        att.player && typeof att.player === "object"
+          ? (att.player as Record<string, unknown>)
+          : att.user && typeof att.user === "object"
+          ? (att.user as Record<string, unknown>)
+          : null;
+      const directFirstLast = [att.first_name, att.last_name]
+        .filter((v) => typeof v === "string" && v.trim())
+        .join(" ")
+        .trim();
+      const nestedFirstLast = nestedPlayer
+        ? [nestedPlayer.first_name, nestedPlayer.last_name]
+            .filter((v) => typeof v === "string" && v.trim())
+            .join(" ")
+            .trim()
+        : "";
+      const pid = Number(
+        att.player_user_id ?? att.player_id ?? att.user_id ?? nestedPlayer?.id ?? 0
+      );
+      const fromLookup = pid > 0 ? playerLookup[pid] : undefined;
+
+      const resolvedName =
+        pickStr(att, ["player_name", "full_name", "student_name", "user_name", "name"], "") ||
+        directFirstLast ||
+        (nestedPlayer ? pickStr(nestedPlayer, ["full_name", "name", "username"], "") : "") ||
+        nestedFirstLast ||
+        fromLookup?.name ||
+        (pid > 0 ? `Player #${pid}` : "Player Attendance");
+
+      const rawSub = pickStr(
+        att,
+        ["remarks", "notes", "session_title", "session_name", "event_name"],
+        "Training Session"
+      );
+      const division = String(att.age_category ?? fromLookup?.division ?? "").trim();
+      const subtitle = division && !rawSub.includes(division) ? `${division} • ${rawSub}` : rawSub;
+
       items.push({
-        id: `att-${String(att.id ?? i)}`,
+        id: `att-${String(att.id ?? att.attendance_id ?? i)}`,
         kind: "attendance",
-        title: pickStr(att, ["player_name", "student_name", "user_name", "name"], "Player Attendance"),
-        subtitle: pickStr(att, ["session_name", "event_name", "remarks", "notes"], "Training Session"),
+        title: resolvedName,
+        subtitle,
         date: formatDate(att.date ?? att.attendance_date ?? att.session_date ?? att.created_at),
         status: pickStr(att, ["status", "attendance_status"], "Present"),
       });
@@ -272,9 +333,8 @@ export default function DashboardClient() {
     }
 
     if (activityFilter === "attendance") return items.filter((it) => it.kind === "attendance");
-    if (activityFilter === "soa") return items.filter((it) => it.kind === "soa");
     return items.slice(0, 6);
-  }, [data, activityFilter]);
+  }, [data, activityFilter, playerLookup]);
 
   function findGroupByCategory(cat: ReturnType<typeof groupCategory>): ModuleGroup | undefined {
     return sidebarGroups.find((g) => groupCategory(g.parent.name) === cat);
@@ -336,6 +396,7 @@ export default function DashboardClient() {
   const tournamentsGroup = findGroupByCategory("tournaments");
   const attendanceGroup = findGroupByCategory("attendance");
   const soaGroup = findGroupByCategory("soa");
+  const profileGroup = findGroupByCategory("profile");
 
   const headerSubtitle =
     activeTab === "rbac"
@@ -343,7 +404,11 @@ export default function DashboardClient() {
       : activeTab === "overview"
       ? `${data.role_name} Dashboard`
       : activeGroup
-      ? activeGroup.parent.name
+      ? groupCategory(activeGroup.parent.name) === "players"
+        ? "Players Management"
+        : groupCategory(activeGroup.parent.name) === "profile"
+        ? "My Profile"
+        : activeGroup.parent.name
       : `${data.role_name} Portal`;
 
   const canCreateTournament =
@@ -357,14 +422,17 @@ export default function DashboardClient() {
   function renderSidebarContent() {
     if (!data) return null;
     return (
-      <div className="flex h-full flex-col border-r border-blue-500/20 bg-gradient-to-b from-[#040d2a] via-[#051238] to-[#03091f] text-white">
-        {/* Crest + Brand */}
-        <div className="relative flex flex-col items-center px-4 pb-4 pt-5 text-center">
+      <div className="relative flex h-full flex-col overflow-hidden border-r border-blue-400/20 bg-gradient-to-b from-[#040d2a] via-[#051238] to-[#03091f] text-white">
+        {/* Subtle top crest ambient glow */}
+        <div className="pointer-events-none absolute -top-10 left-1/2 h-32 w-44 -translate-x-1/2 rounded-full bg-blue-500/20 blur-2xl" />
+
+        {/* Compact Crest + Brand */}
+        <div className="relative shrink-0 px-4 pb-2.5 pt-3.5 text-center">
           <button
             type="button"
             onClick={() => setSidebarOpen(false)}
             aria-label="Close sidebar"
-            className="absolute right-3 top-3 rounded-lg p-1.5 text-blue-200 hover:bg-white/10 lg:hidden"
+            className="absolute right-2.5 top-2.5 rounded-lg p-1.5 text-blue-200 hover:bg-white/10 lg:hidden"
           >
             <CloseIcon className="h-5 w-5" />
           </button>
@@ -372,17 +440,22 @@ export default function DashboardClient() {
             src={crest}
             alt="ALAB Football Club"
             priority
-            className="h-18 w-auto drop-shadow-[0_0_24px_rgba(59,130,246,0.55)]"
+            className="mx-auto h-14 w-auto drop-shadow-[0_0_20px_rgba(59,130,246,0.6)]"
           />
-          <div className="mt-2 font-display uppercase italic leading-none">
-            <span className="block text-2xl font-extrabold tracking-wider text-white">ALAB</span>
-            <span className="block text-xs font-bold tracking-[0.14em] text-blue-100">Football Club</span>
+          <div className="mt-1.5 font-display uppercase italic leading-none">
+            <span className="block text-xl font-extrabold tracking-wider text-white">ALAB</span>
+            <span className="mt-0.5 block text-[10px] font-bold tracking-[0.16em] text-blue-100/90">
+              Football Club
+            </span>
           </div>
-          <p className="mt-1 text-[11px] font-medium italic text-blue-200/75">Keep the fire burning</p>
+          <p className="mt-0.5 text-[10px] font-medium italic text-blue-200/70">
+            Keep the fire burning
+          </p>
+          <div className="mx-auto mt-2.5 h-px w-full bg-gradient-to-r from-transparent via-blue-400/25 to-transparent" />
         </div>
 
-        {/* Clean Top-Level Navigation (Driven purely by RBAC modules!) */}
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
+        {/* Clean Top-Level Navigation (Fits cleanly without clipping or ugly scrollbars) */}
+        <nav className="sidebar-scroll relative flex-1 space-y-0.5 overflow-y-auto px-3 py-1">
           {data.has_dashboard_access && (
             <button
               type="button"
@@ -390,10 +463,10 @@ export default function DashboardClient() {
                 setActiveTab("overview");
                 setSidebarOpen(false);
               }}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-semibold transition ${
+              className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
                 activeTab === "overview"
-                  ? "bg-gradient-to-r from-blue-600 to-sky-500 text-white shadow-[0_0_22px_rgba(56,189,248,0.65)]"
-                  : "text-blue-100/80 hover:bg-white/10 hover:text-white"
+                  ? "bg-gradient-to-r from-blue-600 via-blue-500 to-sky-400 text-white shadow-[0_0_18px_rgba(56,189,248,0.55)]"
+                  : "text-blue-100/80 hover:bg-blue-500/15 hover:text-white"
               }`}
             >
               <HomeIcon className="h-4 w-4 shrink-0" />
@@ -412,10 +485,10 @@ export default function DashboardClient() {
                   setActiveTab(tabKey);
                   setSidebarOpen(false);
                 }}
-                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-semibold transition ${
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
                   active
-                    ? "bg-gradient-to-r from-blue-600 to-sky-500 text-white shadow-[0_0_22px_rgba(56,189,248,0.65)]"
-                    : "text-blue-100/80 hover:bg-white/10 hover:text-white"
+                    ? "bg-gradient-to-r from-blue-600 via-blue-500 to-sky-400 text-white shadow-[0_0_18px_rgba(56,189,248,0.55)]"
+                    : "text-blue-100/80 hover:bg-blue-500/15 hover:text-white"
                 }`}
               >
                 <ModuleIcon name={group.parent.name} className="h-4 w-4 shrink-0" />
@@ -425,58 +498,74 @@ export default function DashboardClient() {
           })}
 
           {isAdmin && (
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("rbac");
-                  setSidebarOpen(false);
-                }}
-                className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left text-sm font-semibold transition ${
-                  activeTab === "rbac"
-                    ? "border-sky-300/70 bg-gradient-to-r from-blue-600 to-sky-500 text-white shadow-[0_0_24px_rgba(56,189,248,0.7)]"
-                    : "border-sky-400/40 bg-blue-600/25 text-white shadow-[0_0_16px_rgba(37,99,235,0.3)] hover:bg-blue-600/45"
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("rbac");
+                setSidebarOpen(false);
+              }}
+              className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
+                activeTab === "rbac"
+                  ? "bg-gradient-to-r from-blue-600 via-blue-500 to-sky-400 text-white shadow-[0_0_18px_rgba(56,189,248,0.55)]"
+                  : "text-blue-100/85 hover:bg-blue-500/15 hover:text-white"
+              }`}
+            >
+              <CrownIcon
+                className={`h-4 w-4 shrink-0 ${
+                  activeTab === "rbac" ? "text-white" : "text-amber-400"
                 }`}
-              >
-                <ShieldIcon className="h-4 w-4 shrink-0" />
-                <span>Admin Panel</span>
-              </button>
-            </div>
+              />
+              <span>Admin Panel</span>
+            </button>
           )}
         </nav>
 
-        {/* Bottom Slogan + User + Logout */}
-        <div className="space-y-2.5 border-t border-blue-500/20 p-3.5">
-          <div className="relative overflow-hidden rounded-xl border border-blue-400/30 bg-gradient-to-br from-[#06184c] via-[#09236b] to-[#051238] px-3.5 py-3">
+        {/* Compact Bottom Slogan + User + Logout */}
+        <div className="relative shrink-0 space-y-2 border-t border-blue-400/15 px-3 py-2.5">
+          <div className="relative overflow-hidden rounded-xl border border-blue-400/30 bg-gradient-to-br from-[#06184c] via-[#09236b] to-[#051238] px-3 py-2.5">
             <Image
               src={alabBall}
               alt="ALAB Football"
-              className="pointer-events-none absolute -bottom-2.5 -right-2.5 h-16 w-16 object-contain drop-shadow-[0_0_14px_rgba(56,189,248,0.65)]"
+              className="pointer-events-none absolute -bottom-2 -right-2 h-14 w-14 object-contain drop-shadow-[0_0_14px_rgba(56,189,248,0.65)]"
             />
-            <p className="relative font-display text-lg font-bold italic leading-tight text-white">
+            <p className="relative font-display text-base font-bold italic leading-tight text-white">
               One Team.
               <br />
               One Goal.
             </p>
-            <span className="relative mt-1.5 block h-0.5 w-16 rounded-full bg-gradient-to-r from-sky-400 to-transparent" />
-          </div>
-
-          <div className="flex items-center gap-2.5 rounded-xl border border-blue-400/20 bg-blue-950/70 px-3 py-2">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-sky-400 text-xs font-bold text-white">
-              {displayName.charAt(0).toUpperCase()}
-            </span>
-            <div className="min-w-0 leading-tight">
-              <p className="truncate text-xs font-bold text-white">{displayName}</p>
-              <p className="truncate text-[10px] text-blue-200/75">{data.role_name}</p>
-            </div>
+            <span className="relative mt-1 block h-0.5 w-14 rounded-full bg-gradient-to-r from-sky-400 to-transparent" />
           </div>
 
           <button
             type="button"
-            onClick={handleLogout}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-400/30 bg-white/5 px-3 py-2 text-xs font-semibold text-blue-100 transition hover:border-rose-400/50 hover:bg-rose-500/20 hover:text-white"
+            onClick={() => {
+              if (profileGroup) {
+                setActiveTab(`group:${profileGroup.parent.id}`);
+                setSidebarOpen(false);
+              }
+            }}
+            className={`flex w-full items-center justify-between gap-2 rounded-xl border border-blue-400/20 bg-blue-950/70 px-2.5 py-1.5 text-left transition ${
+              profileGroup ? "hover:border-sky-400/50 hover:bg-blue-900/60" : "cursor-default"
+            }`}
           >
-            <LogoutIcon className="h-4 w-4" />
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-sky-400 text-xs font-bold text-white shadow-[0_0_10px_rgba(56,189,248,0.45)]">
+                {displayName.charAt(0).toUpperCase()}
+              </span>
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-xs font-bold text-white">{displayName}</p>
+                <p className="truncate text-[10px] text-blue-200/75">{data.role_name}</p>
+              </div>
+            </div>
+            {profileGroup && <ChevronDownIcon className="h-3.5 w-3.5 shrink-0 text-blue-300/70" />}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-400/25 bg-white/5 px-3 py-1.5 text-xs font-semibold text-blue-100 transition hover:border-rose-400/50 hover:bg-rose-500/20 hover:text-white"
+          >
+            <LogoutIcon className="h-3.5 w-3.5" />
             Logout
           </button>
         </div>
@@ -501,8 +590,8 @@ export default function DashboardClient() {
 
       {/* Main Content */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Sleek Top Header Bar (matches Dashboard & Role Permissions mockups) */}
-        <header className="relative border-b border-blue-400/20 px-4 py-3 sm:px-6">
+        {/* Sticky Sleek Top Header Bar */}
+        <header className="sticky top-0 z-30 border-b border-blue-400/20 bg-[#040f33]/90 px-3.5 py-2.5 backdrop-blur-md sm:px-6 sm:py-3">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
             {/* Left Brand + Active View Subtitle */}
             <div className="flex items-center gap-3">
@@ -549,7 +638,16 @@ export default function DashboardClient() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2.5 rounded-full border border-blue-400/30 bg-blue-950/80 py-1 pl-1.5 pr-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (profileGroup) setActiveTab(`group:${profileGroup.parent.id}`);
+                }}
+                title={profileGroup ? "Open My Profile" : displayName}
+                className={`flex items-center gap-2.5 rounded-full border border-blue-400/30 bg-blue-950/80 py-1 pl-1.5 pr-3 transition ${
+                  profileGroup ? "hover:border-sky-400/60 hover:bg-blue-900/70" : "cursor-default"
+                }`}
+              >
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-sky-400 text-xs font-bold text-white shadow-[0_0_12px_rgba(56,189,248,0.5)]">
                   {displayName.charAt(0).toUpperCase()}
                 </span>
@@ -558,13 +656,13 @@ export default function DashboardClient() {
                   <p className="text-[10px] text-blue-200/75">{data.role_name}</p>
                 </div>
                 <ChevronDownIcon className="hidden h-3.5 w-3.5 text-blue-300/70 sm:block" />
-              </div>
+              </button>
             </div>
           </div>
         </header>
 
         {/* Workspace Body */}
-        <main className="mx-auto w-full max-w-6xl flex-1 space-y-5 px-4 py-5 sm:px-6">
+        <main className="mx-auto w-full max-w-6xl flex-1 space-y-4 px-3.5 pb-24 pt-4 sm:space-y-5 sm:px-6 sm:pt-5 lg:pb-6">
           {error && (
             <div className="rounded-xl border border-rose-400/40 bg-rose-500/15 px-4 py-3 text-sm text-rose-200">
               {error}
@@ -577,22 +675,25 @@ export default function DashboardClient() {
             <>
               {/* Row 1: Full-Width Hero Welcome Banner */}
               <section>
-                <div className="relative overflow-hidden rounded-2xl border border-sky-400/35 bg-gradient-to-r from-[#07194f] via-[#0c2d87] to-[#082266] p-6 shadow-[0_14px_40px_-14px_rgba(37,99,235,0.5)] sm:p-7">
-                  {/* Ambient light streaks & real 3D blue soccer ball */}
-                  <div className="pointer-events-none absolute -bottom-16 right-8 h-56 w-56 rounded-full bg-sky-400/30 blur-3xl" />
+                <div className="relative overflow-hidden rounded-2xl border border-sky-400/35 bg-[#06184c] p-6 shadow-[0_14px_40px_-14px_rgba(37,99,235,0.55)] sm:p-7">
+                  {/* Stadium panorama background with glowing soccer ball */}
                   <Image
-                    src={alabBall}
-                    alt="ALAB Football"
+                    src={stadiumBg}
+                    alt=""
+                    fill
                     priority
-                    className="pointer-events-none absolute -right-4 top-1/2 h-40 w-40 -translate-y-1/2 object-contain opacity-95 drop-shadow-[0_0_32px_rgba(56,189,248,0.65)] sm:right-6 sm:h-48 sm:w-48"
+                    sizes="(max-width: 1280px) 100vw, 1152px"
+                    className="pointer-events-none object-cover object-right opacity-90"
                   />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#041038]/92 via-[#072066]/62 to-[#040f33]/35" />
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-300/60 to-transparent" />
 
-                  <div className="relative flex flex-wrap items-center justify-between gap-4 pr-28 sm:pr-52">
+                  <div className="relative flex flex-wrap items-center justify-between gap-4 sm:pr-44">
                     <div>
                       <span className="inline-block rounded-lg border border-sky-300/30 bg-blue-500/30 px-3 py-1 text-xs font-semibold text-sky-100">
                         Welcome Back!
                       </span>
-                      <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+                      <h1 className="mt-2.5 text-2xl font-extrabold tracking-tight text-white sm:mt-3 sm:text-4xl">
                         Hello, {displayName}!
                       </h1>
                       <p className="mt-1.5 text-xs text-blue-100/85 sm:text-sm">
@@ -718,9 +819,9 @@ export default function DashboardClient() {
                     )}
                   </div>
 
-                  <div className="grid flex-1 grid-cols-2 items-center gap-4 py-2">
+                  <div className="grid flex-1 grid-cols-1 items-center gap-4 py-2 sm:grid-cols-2">
                     {/* Circular Attendance Rate Donut */}
-                    <div className="flex flex-col items-center justify-center border-r border-blue-400/20 pr-3">
+                    <div className="flex flex-col items-center justify-center border-b border-blue-400/20 pb-4 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-3">
                       <div className="relative flex h-28 w-28 items-center justify-center">
                         <svg className="h-full w-full -rotate-90" viewBox="0 0 112 112">
                           <circle
@@ -806,77 +907,100 @@ export default function DashboardClient() {
                 </div>
               </section>
 
-              {/* Row 3: Recent Activity Full-Width Card */}
-              <section className="dash-card rounded-2xl p-5">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/20 text-sky-300 ring-1 ring-sky-400/30">
-                      <BarChartIcon className="h-4 w-4" />
-                    </span>
-                    <h2 className="text-base font-bold text-white">Recent Activity</h2>
+              {/* Row 3: Compact Recent Activity Card (Admin only) */}
+              {isAdmin && (
+                <section className="dash-card rounded-2xl p-4">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/25">
+                        <BarChartIcon className="h-3.5 w-3.5" />
+                      </span>
+                      <h2 className="text-sm font-bold text-white">Recent Activity</h2>
+                    </div>
+
+                    <CustomSelect
+                      ariaLabel="Filter recent activity"
+                      size="xs"
+                      pill
+                      value={activityFilter}
+                      onChange={(val) => setActivityFilter(val as ActivityFilter)}
+                      leadingIcon={<HistoryIcon className="h-3.5 w-3.5" />}
+                      menuMinWidth={150}
+                      options={[
+                        { value: "week", label: "This Week" },
+                        { value: "attendance", label: "Attendance" },
+                        { value: "all", label: "All Activity" },
+                      ]}
+                    />
                   </div>
 
-                  <select
-                    aria-label="Filter recent activity"
-                    value={activityFilter}
-                    onChange={(e) => setActivityFilter(e.target.value as ActivityFilter)}
-                    className="rounded-full border border-blue-400/30 bg-blue-950/80 px-3.5 py-1.5 text-xs font-semibold text-blue-100 focus:border-sky-400 focus:outline-none"
-                  >
-                    <option value="week" className="bg-[#051238]">
-                      This Week
-                    </option>
-                    <option value="attendance" className="bg-[#051238]">
-                      Attendance
-                    </option>
-                    <option value="soa" className="bg-[#051238]">
-                      SOA &amp; Billing
-                    </option>
-                    <option value="all" className="bg-[#051238]">
-                      All Activity
-                    </option>
-                  </select>
-                </div>
-
-                {recentActivities.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-6 text-center">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-sky-500/15 text-sky-400 ring-1 ring-sky-400/30">
-                      <HistoryIcon className="h-6 w-6" />
-                    </span>
-                    <p className="mt-3 text-sm font-bold text-white">No recent activity found.</p>
-                    <p className="mt-0.5 text-xs text-blue-200/70">
-                      Activities will appear here once there are updates.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-blue-400/10">
-                    {recentActivities.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex flex-wrap items-center justify-between gap-3 py-2.5 text-sm"
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <span className="h-2 w-2 shrink-0 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)]" />
-                          <div className="min-w-0">
+                  {recentActivities.length === 0 ? (
+                    <div className="flex items-center gap-2.5 rounded-xl border border-blue-400/10 bg-[#040f30]/50 px-3.5 py-2.5 text-xs text-blue-200/75">
+                      <HistoryIcon className="h-4 w-4 shrink-0 text-sky-400/80" />
+                      <span>No recent activity yet. Updates will appear here.</span>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-blue-400/10">
+                      {recentActivities.slice(0, 4).map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs"
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" />
                             <p className="truncate font-semibold text-white">{item.title}</p>
-                            <p className="truncate text-xs text-blue-200/70">{item.subtitle}</p>
+                            <span className="hidden truncate text-blue-200/65 sm:inline">
+                              • {item.subtitle}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-[11px] text-blue-200/70">{item.date}</span>
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusPillClass(item.status)}`}
+                            >
+                              {item.status}
+                            </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs text-blue-200/75">{item.date}</span>
-                          <span
-                            className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusPillClass(item.status)}`}
-                          >
-                            {item.status}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
             </>
           ) : activeGroup ? (
-            groupCategory(activeGroup.parent.name) === "attendance" ? (
+            groupCategory(activeGroup.parent.name) === "tournaments" ? (
+              <TournamentsManager
+                roleId={data.role_id}
+                canCreate={
+                  isAdmin ||
+                  data.access.module_ids.includes(4) ||
+                  activeGroup.actions.some((a) => /(create|add)/i.test(a.name))
+                }
+                canEdit={
+                  isAdmin ||
+                  data.access.module_ids.includes(5) ||
+                  activeGroup.actions.some((a) => /(edit|update|manage)/i.test(a.name))
+                }
+                canDelete={
+                  isAdmin ||
+                  data.access.module_ids.includes(6) ||
+                  activeGroup.actions.some((a) => /(delete|remove)/i.test(a.name))
+                }
+                canManageRoster={
+                  isAdmin ||
+                  data.access.module_ids.includes(7) ||
+                  activeGroup.actions.some((a) => /roster/i.test(a.name))
+                }
+                canApproveConsent={
+                  isAdmin ||
+                  data.role_id === 7 ||
+                  data.access.module_ids.includes(8) ||
+                  activeGroup.actions.some((a) => /consent|approve/i.test(a.name))
+                }
+                onDataChanged={() => void loadDashboard()}
+              />
+            ) : groupCategory(activeGroup.parent.name) === "attendance" ? (
               <AttendanceManager
                 canRecord={
                   isAdmin ||
@@ -889,6 +1013,33 @@ export default function DashboardClient() {
                   data.access.modules.some((m) => /(add|create|enroll|manage).*player/i.test(m.name))
                 }
                 onAttendanceChanged={() => void loadDashboard()}
+              />
+            ) : groupCategory(activeGroup.parent.name) === "players" ? (
+              <PlayersManager
+                currentUserName={displayName}
+                roleId={data.role_id}
+                isAdmin={isAdmin}
+                canLinkParent={isAdmin || data.access.module_ids.includes(24)}
+                canAddPlayer={
+                  isAdmin ||
+                  data.role_id === 6 ||
+                  activeGroup.actions.some((a) => /(add|create|enroll|manage)/i.test(a.name))
+                }
+                canRecordAttendance={
+                  isAdmin ||
+                  data.role_id === 6 ||
+                  data.access.modules.some((m) => /(record|mark).*attendance/i.test(m.name))
+                }
+                onDataChanged={() => void loadDashboard()}
+              />
+            ) : groupCategory(activeGroup.parent.name) === "profile" ? (
+              <ProfileManager
+                user={data.user}
+                roleId={data.role_id}
+                roleName={data.role_name}
+                isAdmin={isAdmin}
+                actions={activeGroup.actions}
+                onProfileUpdated={() => void loadDashboard()}
               />
             ) : (
               <ModuleWorkspace
@@ -924,6 +1075,53 @@ export default function DashboardClient() {
             </div>
           )}
         </main>
+
+        {/* Mobile Bottom Quick Navigation Bar (Phones & Small Tablets) */}
+        <nav
+          aria-label="Mobile quick navigation"
+          className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-blue-400/25 bg-[#040d2a]/95 px-2 py-1.5 backdrop-blur-lg lg:hidden"
+        >
+          {data.has_dashboard_access && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("overview")}
+              className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-semibold transition ${
+                activeTab === "overview" ? "text-sky-300" : "text-blue-200/70 hover:text-white"
+              }`}
+            >
+              <HomeIcon className="h-5 w-5" />
+              <span className="truncate">Home</span>
+            </button>
+          )}
+
+          {sidebarGroups.slice(0, data.has_dashboard_access ? 3 : 4).map((group) => {
+            const tabKey: ActiveTab = `group:${group.parent.id}`;
+            const active = activeTab === tabKey;
+            const shortLabel = group.parent.name.split(/\s|&/)[0] || group.parent.name;
+            return (
+              <button
+                key={group.parent.id}
+                type="button"
+                onClick={() => setActiveTab(tabKey)}
+                className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-semibold transition ${
+                  active ? "text-sky-300" : "text-blue-200/70 hover:text-white"
+                }`}
+              >
+                <ModuleIcon name={group.parent.name} className="h-5 w-5" />
+                <span className="max-w-16 truncate">{shortLabel}</span>
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-semibold text-blue-200/70 transition hover:text-white"
+          >
+            <MenuIcon className="h-5 w-5" />
+            <span>Menu</span>
+          </button>
+        </nav>
       </div>
     </div>
   );

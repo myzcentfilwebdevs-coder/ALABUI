@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import stadiumBg from "@/app/logo/backgoundimage.png";
 import {
   fetchAllModules,
   fetchRoleAccessByRole,
@@ -333,8 +335,16 @@ export default function RbacManager({ currentUserRoleId, onSelfAccessUpdated }: 
   return (
     <div className="space-y-4">
       {/* Top Glowing Header Card + 4 Role Cards */}
-      <div className="relative overflow-hidden rounded-2xl border border-blue-400/35 bg-gradient-to-br from-[#0c2b7a]/90 via-[#071a52]/95 to-[#040f33]/95 p-5 shadow-[0_14px_40px_-14px_rgba(37,99,235,0.45)] backdrop-blur-md">
-        <div className="pointer-events-none absolute -left-16 -top-16 h-48 w-48 rounded-full bg-blue-500/25 blur-3xl" />
+      <div className="relative overflow-hidden rounded-2xl border border-blue-400/35 bg-[#06184c] p-5 shadow-[0_16px_44px_-14px_rgba(37,99,235,0.5)] backdrop-blur-md">
+        <Image
+          src={stadiumBg}
+          alt=""
+          fill
+          sizes="(max-width: 1280px) 100vw, 1152px"
+          className="pointer-events-none object-cover object-right opacity-40"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#04113a]/88 via-[#071a52]/82 to-[#040f33]/92" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-300/55 to-transparent" />
 
         {/* Title Row */}
         <div className="relative flex flex-wrap items-center justify-between gap-3">
@@ -379,7 +389,7 @@ export default function RbacManager({ currentUserRoleId, onSelfAccessUpdated }: 
                   setSelectedRoleId(role.id);
                   setToast(null);
                 }}
-                className={`group relative flex items-center gap-3.5 overflow-hidden rounded-xl border px-4 py-3.5 text-left transition-all ${
+                className={`group relative flex items-center gap-2.5 overflow-hidden rounded-xl border px-3 py-3 text-left transition-all sm:gap-3.5 sm:px-4 sm:py-3.5 ${
                   active
                     ? "border-sky-400 bg-gradient-to-br from-blue-600/55 via-blue-700/40 to-sky-500/20 shadow-[0_0_24px_rgba(56,189,248,0.4),inset_0_1px_0_rgba(255,255,255,0.25)]"
                     : "border-blue-400/20 bg-[#051136]/75 hover:border-blue-400/45 hover:bg-[#081a4f]/80"
@@ -387,23 +397,23 @@ export default function RbacManager({ currentUserRoleId, onSelfAccessUpdated }: 
               >
                 {role.id === 5 && (
                   <CrownIcon
-                    className={`absolute right-3 top-2.5 h-3.5 w-3.5 ${
+                    className={`absolute right-2.5 top-2 h-3.5 w-3.5 sm:right-3 sm:top-2.5 ${
                       active ? "text-sky-300" : "text-blue-300/40"
                     }`}
                   />
                 )}
                 <span
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition sm:h-10 sm:w-10 ${
                     active
                       ? "bg-sky-400/20 text-sky-200 shadow-[0_0_14px_rgba(56,189,248,0.45)]"
                       : "bg-blue-900/50 text-blue-200/80 group-hover:text-white"
                   }`}
                 >
-                  <RoleIcon roleId={role.id} className="h-6 w-6" />
+                  <RoleIcon roleId={role.id} className="h-5 w-5 sm:h-6 sm:w-6" />
                 </span>
                 <div className="min-w-0">
-                  <span className="block text-sm font-bold text-white sm:text-base">{role.name}</span>
-                  <span className={`block text-xs ${active ? "text-blue-100" : "text-blue-200/70"}`}>
+                  <span className="block truncate text-sm font-bold text-white sm:text-base">{role.name}</span>
+                  <span className={`block truncate text-[11px] sm:text-xs ${active ? "text-blue-100" : "text-blue-200/70"}`}>
                     {count} {count === 1 ? "Permission" : "Permissions"}
                   </span>
                 </div>
@@ -508,13 +518,13 @@ export default function RbacManager({ currentUserRoleId, onSelfAccessUpdated }: 
                 className="overflow-hidden rounded-2xl border border-blue-400/30 bg-gradient-to-r from-[#0a2263]/95 via-[#07184a]/95 to-[#0b2569]/95 shadow-[0_10px_28px_-14px_rgba(2,8,28,0.9)] transition hover:border-blue-400/45"
               >
                 {/* Module Card Header */}
-                <div className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
+                <div className="flex items-center justify-between gap-2.5 px-3.5 py-3 sm:gap-3 sm:px-5 sm:py-3.5">
                   <button
                     type="button"
                     onClick={() => {
                       if (hasMultiple) toggleExpand(group.parent.id);
                     }}
-                    className={`flex min-w-0 flex-1 items-center gap-3.5 text-left ${
+                    className={`flex min-w-0 flex-1 items-center gap-2.5 text-left sm:gap-3.5 ${
                       hasMultiple ? "cursor-pointer" : "cursor-default"
                     }`}
                   >
@@ -528,14 +538,14 @@ export default function RbacManager({ currentUserRoleId, onSelfAccessUpdated }: 
                       <p className="truncate text-sm font-bold text-white sm:text-base">
                         {group.parent.name}
                       </p>
-                      <p className="truncate text-xs text-blue-200/70">
+                      <p className="hidden truncate text-xs text-blue-200/70 sm:block">
                         {getGroupSubtitle(group.parent)}
                       </p>
                     </div>
                   </button>
 
-                  <div className="flex shrink-0 items-center gap-3">
-                    <span className="rounded-full border border-blue-400/25 bg-[#040e2e]/85 px-3 py-1 text-xs font-bold text-blue-100">
+                  <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                    <span className="rounded-full border border-blue-400/25 bg-[#040e2e]/85 px-2.5 py-0.5 text-[11px] font-bold text-blue-100 sm:px-3 sm:py-1 sm:text-xs">
                       {enabledCount} / {totalCount}
                     </span>
 
@@ -562,7 +572,7 @@ export default function RbacManager({ currentUserRoleId, onSelfAccessUpdated }: 
                         return (
                           <div
                             key={item.id}
-                            className="flex items-center justify-between gap-4 px-5 py-2.5 transition hover:bg-blue-500/[0.06]"
+                            className="flex items-center justify-between gap-3 px-3.5 py-2.5 transition hover:bg-blue-500/[0.06] sm:gap-4 sm:px-5"
                           >
                             <div className="flex min-w-0 items-center gap-3">
                               <span

@@ -1,16 +1,20 @@
 "use client";
 
 import {
+  useCallback,
+  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
+  type ChangeEvent,
   type ClipboardEvent,
   type InputHTMLAttributes,
   type KeyboardEvent,
   type ReactNode,
   type SelectHTMLAttributes,
 } from "react";
-import { ChevronDownIcon, EyeIcon, EyeOffIcon } from "@/components/icons";
+import { createPortal } from "react-dom";
+import { CheckIcon, ChevronDownIcon, EyeIcon, EyeOffIcon } from "@/components/icons";
 
 const emptySubscribe = () => () => {};
 function useIsHydrated() {
@@ -93,11 +97,58 @@ export function SelectField({
   placeholder,
   options,
   value,
+  onChange,
+  disabled,
   className,
-  ...props
 }: SelectFieldProps) {
   const selectId = id ?? name ?? label;
-  const isEmpty = !value;
+  const currentVal = typeof value === "string" ? value : "";
+  const isEmpty = !currentVal;
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuStyle, setMenuStyle] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+
+  const updatePosition = useCallback(() => {
+    const btn = triggerRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    setMenuStyle({
+      top: rect.bottom + 6,
+      left: rect.left,
+      width: rect.width,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleOutside(e: MouseEvent) {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    function handleKey(e: globalThis.KeyboardEvent) {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", handleKey);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, updatePosition]);
+
   return (
     <div className={className}>
       <label htmlFor={selectId} className="sr-only">
@@ -105,32 +156,85 @@ export function SelectField({
       </label>
       <div className="relative">
         <FieldIcon icon={icon} />
-        <select
+        <button
+          ref={triggerRef}
           id={selectId}
-          name={name}
-          value={value}
-          aria-invalid={!!error}
-          suppressHydrationWarning
+          type="button"
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => {
+            if (disabled) return;
+            if (!open) {
+              updatePosition();
+              setOpen(true);
+            } else {
+              setOpen(false);
+            }
+          }}
           className={inputClass(
             error,
             !!icon,
-            `appearance-none pr-10 ${isEmpty ? "text-slate-500" : "text-slate-900"}`
+            `flex items-center justify-between pr-9 text-left ${
+              open ? "border-blue-500 bg-white ring-4 ring-blue-100" : ""
+            } ${isEmpty ? "text-slate-500" : "font-medium text-slate-900"}`
           )}
-          {...props}
         >
-          <option value="" disabled>
-            {placeholder ?? label}
-          </option>
-          {options.map((opt) => (
-            <option key={opt} value={opt} className="text-slate-900">
-              {opt}
-            </option>
-          ))}
-        </select>
-        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500">
+          <span className="truncate">{currentVal || placeholder || label}</span>
+        </button>
+        <span
+          className={`pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 transition-transform duration-150 ${
+            open ? "rotate-180 text-blue-600" : "text-slate-500"
+          }`}
+        >
           <ChevronDownIcon className="h-4 w-4" />
         </span>
       </div>
+
+      {open &&
+        menuStyle &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="listbox"
+            style={{
+              position: "fixed",
+              top: menuStyle.top,
+              left: menuStyle.left,
+              width: menuStyle.width,
+              zIndex: 9999,
+            }}
+            className="rounded-xl border border-blue-200 bg-white p-1.5 shadow-[0_14px_34px_rgba(11,42,107,0.22)] ring-1 ring-blue-500/10"
+          >
+            {options.map((opt) => {
+              const isSelected = opt === currentVal;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    onChange?.({
+                      target: { name: name ?? "", value: opt },
+                    } as unknown as ChangeEvent<HTMLSelectElement>);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
+                    isSelected
+                      ? "bg-gradient-to-r from-blue-600 to-sky-500 text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)]"
+                      : "text-slate-700 hover:bg-blue-50 hover:text-blue-900"
+                  }`}
+                >
+                  <span>{opt}</span>
+                  {isSelected && <CheckIcon className="h-4 w-4 shrink-0 text-white" />}
+                </button>
+              );
+            })}
+          </div>,
+          document.body
+        )}
       <FieldError error={error} />
     </div>
   );
