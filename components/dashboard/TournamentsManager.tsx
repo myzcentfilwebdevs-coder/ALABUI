@@ -864,24 +864,53 @@ export default function TournamentsManager({
 
   function handleExportScheduleCsv() {
     if (!detail) return;
+    const csvCell = (raw: string) => `"${raw.replace(/"/g, '""')}"`;
+    // Force Excel / Sheets to display values like "3 - 1" or "Nov 27, 2026" as literal text
+    // so Excel never auto-converts scores into dates (e.g. "3-1" -> "3-Jan") or dates into "########".
+    const excelTextCell = (raw: string) => (raw ? `"=""${raw.replace(/"/g, '""')}"""` : '""');
+
+    const formatCsvDate = (iso: string) => {
+      if (!iso) return "";
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+      if (!m) return iso;
+      const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    };
+
     const rows = [
-      ["Category", "Game", "Date", "Time", "Home", "Opponent", "Score", "Pitch", "Status", "Notes"].join(","),
-      ...detail.matches.map((m) =>
-        [
-          `"${m.age_category}"`,
-          `"${m.game_label}"`,
-          `"${m.match_date}"`,
-          `"${formatMatchTime(m.match_time)}"`,
-          `"${m.home_team.replace(/"/g, '""')}"`,
-          `"${m.opponent.replace(/"/g, '""')}"`,
-          `"${m.alab_score !== null && m.opponent_score !== null ? `${m.alab_score}-${m.opponent_score}` : ""}"`,
-          `"${m.pitch}"`,
-          `"${m.status}"`,
-          `"${m.remarks.replace(/"/g, '""')}"`,
-        ].join(",")
-      ),
+      [
+        "Category",
+        "Game",
+        "Date",
+        "Time",
+        "Home",
+        "Opponent",
+        "Home Score",
+        "Opponent Score",
+        "Score",
+        "Pitch",
+        "Status",
+        "Notes",
+      ].join(","),
+      ...detail.matches.map((m) => {
+        const hasScore = m.alab_score !== null && m.opponent_score !== null;
+        return [
+          csvCell(m.age_category),
+          csvCell(m.game_label),
+          excelTextCell(formatCsvDate(m.match_date)),
+          excelTextCell(formatMatchTime(m.match_time)),
+          csvCell(m.home_team),
+          csvCell(m.opponent),
+          hasScore ? String(m.alab_score) : "",
+          hasScore ? String(m.opponent_score) : "",
+          hasScore ? excelTextCell(`${m.alab_score} - ${m.opponent_score}`) : '""',
+          csvCell(m.pitch),
+          csvCell(m.status),
+          csvCell(m.remarks),
+        ].join(",");
+      }),
     ];
-    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["\uFEFF" + rows.join("\r\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
