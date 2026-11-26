@@ -3,6 +3,7 @@ import Image from "next/image";
 import wordmark from "@/app/logo/alabBackground.png";
 import SiteHeader from "@/components/site/SiteHeader";
 import SiteFooter from "@/components/site/SiteFooter";
+import GuestGuard from "./GuestGuard";
 import { BallIcon, HandshakeIcon, StarIcon, TrophyIcon } from "@/components/icons";
 
 const FEATURES = [
@@ -23,6 +24,7 @@ interface AuthShellProps {
 export default function AuthShell({ title, subtitle, icon, children, footer }: AuthShellProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-[#030b24] text-white lg:h-dvh lg:overflow-hidden">
+      <GuestGuard />
       <SiteHeader />
 
       <main className="hero-bg relative flex flex-1 items-center overflow-hidden">

@@ -51,6 +51,8 @@ export const DASHBOARD_ENDPOINTS = {
     `${API_BASE_URL}/api/tournaments/roster/${rosterId}`,
   tournamentRosterConsent: (rosterId: number | string) =>
     `${API_BASE_URL}/api/tournaments/roster/${rosterId}/consent`,
+  users: `${API_BASE_URL}/api/users`,
+  userRole: (userId: number | string) => `${API_BASE_URL}/api/users/${userId}/role`,
 } as const;
 
 const TOKEN_KEY = "token";
@@ -2528,4 +2530,161 @@ export async function removeRosterPlayer(rosterId: number | string) {
   return authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.tournamentRosterById(rosterId), {
     method: "DELETE",
   });
+}
+
+/* ==================== ADMIN USER ROLE MANAGEMENT API ==================== */
+
+export const USER_ROLE_OPTIONS = ["Admin", "Coach", "Parent", "Player"] as const;
+export const USER_STATUS_OPTIONS = ["Active", "Inactive", "Pending", "Suspended"] as const;
+
+export interface ManagedUser {
+  user_id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  middle_name: string;
+  last_name: string;
+  full_name: string;
+  phone_number: string;
+  role_id: number;
+  role_name: string;
+  status_id: number;
+  status_name: string;
+  created_at?: string;
+}
+
+function normalizeManagedUser(raw: Record<string, unknown>): ManagedUser | null {
+  const userId = Number(raw.user_id ?? raw.id ?? raw.UserID ?? raw.ID ?? 0);
+  if (!Number.isInteger(userId) || userId <= 0) return null;
+
+  const first = String(raw.first_name ?? raw.FirstName ?? "").trim();
+  const middle = String(raw.middle_name ?? raw.MiddleName ?? "").trim();
+  const last = String(raw.last_name ?? raw.LastName ?? "").trim();
+  const rawFull = String(raw.full_name ?? raw.FullName ?? raw.name ?? "").trim();
+  const computedFull = [first, middle, last].filter(Boolean).join(" ").trim();
+  const username = String(raw.username ?? raw.Username ?? "").trim();
+
+  const roleId = Number(raw.role_id ?? raw.RoleID ?? 0);
+  const roleNameRaw = String(raw.role_name ?? raw.RoleName ?? raw.role ?? "").trim();
+  const roleName =
+    roleNameRaw ||
+    (roleId === 5
+      ? "Admin"
+      : roleId === 6
+      ? "Coach"
+      : roleId === 7
+      ? "Parent"
+      : roleId === 8
+      ? "Player"
+      : "Parent");
+
+  const statusId = Number(raw.status_id ?? raw.StatusID ?? 0);
+  const statusName =
+    String(raw.status_name ?? raw.StatusName ?? raw.status ?? "").trim() || "Active";
+
+  return {
+    user_id: userId,
+    username,
+    email: String(raw.email ?? raw.Email ?? "").trim(),
+    first_name: first,
+    middle_name: middle,
+    last_name: last,
+    full_name: rawFull || computedFull || username || `User #${userId}`,
+    phone_number: String(raw.phone_number ?? raw.PhoneNumber ?? "").trim(),
+    role_id: roleId,
+    role_name: roleName,
+    status_id: statusId,
+    status_name: statusName,
+    created_at: raw.created_at ? String(raw.created_at) : undefined,
+  };
+}
+
+export async function fetchAdminUsers(params?: {
+  role?: string;
+  search?: string;
+}): Promise<ApiResult<ManagedUser[]>> {
+  const qs = new URLSearchParams();
+  if (params?.role && params.role !== "All" && params.role !== "all") {
+    qs.set("role", params.role);
+  }
+  if (params?.search?.trim()) {
+    qs.set("search", params.search.trim());
+  }
+  const url = `${DASHBOARD_ENDPOINTS.users}${qs.toString() ? `?${qs.toString()}` : ""}`;
+  const res = await authRequest<unknown>(url);
+  if (!res.ok) return { ...res, data: [] };
+
+  const rawList = Array.isArray(res.data)
+    ? res.data
+    : res.data && typeof res.data === "object"
+    ? (res.data as Record<string, unknown>).users ??
+      (res.data as Record<string, unknown>).data ??
+      []
+    : [];
+
+  const users = asObjectArray(rawList)
+    .map(normalizeManagedUser)
+    .filter((u): u is ManagedUser => u !== null);
+
+  return { ...res, data: users };
+}
+
+export interface UpdateUserRoleResponse {
+  user_id?: number;
+  username?: string;
+  role_id?: number;
+  role_name?: string;
+  status_id?: number;
+  status_name?: string;
+  message?: string;
+  error?: string;
+}
+
+export async function verifyAuthSession(): Promise<{ valid: boolean; expired: boolean }> {
+  const token = getAuthToken();
+  if (!token) return { valid: false, expired: false };
+
+  const res = await authRequest<Record<string, unknown>>(AUTH_ENDPOINTS.me);
+  if (res.ok) return { valid: true, expired: false };
+  if (res.status === 401 || res.status === 403) {
+    clearAuthToken();
+    return { valid: false, expired: true };
+  }
+  return { valid: false, expired: false };
+}
+
+export async function updateAdminUserRole(
+  userId: number,
+  payload: { role: string; status: string }
+): Promise<ApiResult<UpdateUserRoleResponse>> {
+  const res = await authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.userRole(userId), {
+    method: "PUT",
+    body: {
+      role: payload.role,
+      status: payload.status,
+    },
+  });
+
+  const root =
+    res.data && typeof res.data === "object"
+      ? ((res.data.user && typeof res.data.user === "object"
+          ? res.data.user
+          : res.data.data && typeof res.data.data === "object"
+          ? res.data.data
+          : res.data) as Record<string, unknown>)
+      : {};
+
+  return {
+    ...res,
+    data: {
+      user_id: Number(root.user_id ?? root.id ?? userId) || userId,
+      username: typeof root.username === "string" ? root.username : undefined,
+      role_id: root.role_id !== undefined ? Number(root.role_id) : undefined,
+      role_name: typeof root.role_name === "string" ? root.role_name : payload.role,
+      status_id: root.status_id !== undefined ? Number(root.status_id) : undefined,
+      status_name: typeof root.status_name === "string" ? root.status_name : payload.status,
+      message: typeof res.data?.message === "string" ? res.data.message : undefined,
+      error: typeof res.data?.error === "string" ? res.data.error : undefined,
+    },
+  };
 }

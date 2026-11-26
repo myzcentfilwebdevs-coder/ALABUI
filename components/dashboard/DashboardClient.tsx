@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import crest from "@/app/logo/logoALAB.png";
@@ -35,6 +35,7 @@ import {
   RefreshIcon,
   SettingsIcon,
   ShieldIcon,
+  ShieldLockIcon,
   TrendUpIcon,
   TrophyIcon,
   UserIcon,
@@ -46,9 +47,11 @@ import PlayersManager from "./PlayersManager";
 import CustomSelect from "@/components/ui/CustomSelect";
 import ProfileManager from "./ProfileManager";
 import TournamentsManager from "./TournamentsManager";
+import UserManagementManager from "./UserManagementManager";
 import AddPlayerModal from "./AddPlayerModal";
+import ConfirmModal from "./ConfirmModal";
 
-type ActiveTab = "overview" | "rbac" | "no-access" | `group:${number}`;
+type ActiveTab = "overview" | "rbac" | "users" | "no-access" | `group:${number}`;
 type ActivityFilter = "week" | "attendance" | "all";
 
 function formatPeso(amount: unknown): string {
@@ -112,9 +115,10 @@ function ModuleIcon({ name, className }: { name: string; className?: string }) {
 
 function groupCategory(
   name: string
-): "tournaments" | "attendance" | "soa" | "players" | "profile" | "generic" {
+): "tournaments" | "attendance" | "soa" | "players" | "profile" | "users" | "generic" {
   const n = name.toLowerCase();
   if (/profile|own\s*account|my\s*account/.test(n)) return "profile";
+  if (/user\s*management|manage\s*user|user\s*role|^users$/.test(n)) return "users";
   if (/tournament|match|fixture|event/.test(n)) return "tournaments";
   if (/attendance|training|session/.test(n)) return "attendance";
   if (/soa|bill|payment|finance|fee/.test(n)) return "soa";
@@ -134,6 +138,20 @@ export default function DashboardClient() {
   const [playerLookup, setPlayerLookup] = useState<
     Record<number, { name: string; division: string }>
   >({});
+  const [logoutConfirmMode, setLogoutConfirmMode] = useState<"manual" | "back" | null>(null);
+  const tabHistoryRef = useRef<ActiveTab[]>([]);
+  const guardPushedRef = useRef(false);
+
+  const navigateTab = useCallback((next: ActiveTab) => {
+    setActiveTab((prev) => {
+      if (prev === next) return prev;
+      tabHistoryRef.current = [...tabHistoryRef.current.slice(-19), prev];
+      return next;
+    });
+    if (typeof window !== "undefined") {
+      window.history.pushState({ alabPortal: true, tab: next }, "", window.location.href);
+    }
+  }, []);
 
   const loadDashboard = useCallback(async () => {
     if (!getAuthToken()) {
@@ -189,6 +207,7 @@ export default function DashboardClient() {
 
       setActiveTab((prev) => {
         if (prev === "rbac" && userIsAdmin) return "rbac";
+        if (prev === "users" && userIsAdmin) return "users";
         if (prev === "overview" && session.has_dashboard_access) return "overview";
         if (prev.startsWith("group:")) {
           const stillAllowed = groups.some((g) => `group:${g.parent.id}` === prev);
@@ -210,6 +229,74 @@ export default function DashboardClient() {
     }, 0);
     return () => clearTimeout(timer);
   }, [loadDashboard]);
+
+  // Browser Back-button, bfcache, and cross-tab session security guard
+  useEffect(() => {
+    if (!data || typeof window === "undefined") return;
+
+    if (!guardPushedRef.current) {
+      window.history.pushState({ alabPortal: true, rootGuard: true }, "", window.location.href);
+      guardPushedRef.current = true;
+    }
+
+    function enforceSessionOrRedirect() {
+      if (!getAuthToken()) {
+        setData(null);
+        window.location.replace("/login");
+        return false;
+      }
+      return true;
+    }
+
+    function handlePopState() {
+      if (!enforceSessionOrRedirect()) return;
+
+      if (tabHistoryRef.current.length > 0) {
+        const prevTab = tabHistoryRef.current.pop()!;
+        setActiveTab(prevTab);
+        setSidebarOpen(false);
+        if (tabHistoryRef.current.length === 0) {
+          window.history.pushState({ alabPortal: true, rootGuard: true }, "", window.location.href);
+        }
+        return;
+      }
+
+      // Already on root portal view — stay securely inside /dashboard and confirm before logging out
+      window.history.pushState({ alabPortal: true, rootGuard: true }, "", window.location.href);
+      setLogoutConfirmMode("back");
+    }
+
+    function handlePageShow(e: PageTransitionEvent) {
+      if (e.persisted || !getAuthToken()) {
+        enforceSessionOrRedirect();
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        enforceSessionOrRedirect();
+      }
+    }
+
+    function handleStorage(e: StorageEvent) {
+      if (e.key === "token" && !e.newValue) {
+        setData(null);
+        window.location.replace("/login");
+      }
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("pageshow", handlePageShow);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("pageshow", handlePageShow);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [data]);
 
   const moduleGroups = useMemo(
     () => groupModulesByParent(data?.access.modules ?? [], { collapseOrphans: true }),
@@ -340,9 +427,20 @@ export default function DashboardClient() {
     return sidebarGroups.find((g) => groupCategory(g.parent.name) === cat);
   }
 
-  function handleLogout() {
+  function performLogout() {
     clearAuthToken();
-    router.replace("/login");
+    setLogoutConfirmMode(null);
+    setData(null);
+    if (typeof window !== "undefined") {
+      window.location.replace("/login");
+    } else {
+      router.replace("/login");
+    }
+  }
+
+  function requestLogout() {
+    setSidebarOpen(false);
+    setLogoutConfirmMode("manual");
   }
 
   if (loading && !data) {
@@ -370,7 +468,7 @@ export default function DashboardClient() {
           </button>
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={performLogout}
             className="rounded-xl border border-blue-400/50 px-5 py-2.5 text-sm font-semibold text-blue-100 hover:bg-white/10"
           >
             Back to Login
@@ -401,6 +499,8 @@ export default function DashboardClient() {
   const headerSubtitle =
     activeTab === "rbac"
       ? "Role Permissions"
+      : activeTab === "users"
+      ? "User Management"
       : activeTab === "overview"
       ? `${data.role_name} Dashboard`
       : activeGroup
@@ -408,6 +508,8 @@ export default function DashboardClient() {
         ? "Players Management"
         : groupCategory(activeGroup.parent.name) === "profile"
         ? "My Profile"
+        : groupCategory(activeGroup.parent.name) === "users"
+        ? "User Management"
         : activeGroup.parent.name
       : `${data.role_name} Portal`;
 
@@ -460,7 +562,7 @@ export default function DashboardClient() {
             <button
               type="button"
               onClick={() => {
-                setActiveTab("overview");
+                navigateTab("overview");
                 setSidebarOpen(false);
               }}
               className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
@@ -482,7 +584,7 @@ export default function DashboardClient() {
                 key={group.parent.id}
                 type="button"
                 onClick={() => {
-                  setActiveTab(tabKey);
+                  navigateTab(tabKey);
                   setSidebarOpen(false);
                 }}
                 className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
@@ -497,11 +599,30 @@ export default function DashboardClient() {
             );
           })}
 
+          {isAdmin &&
+            !sidebarGroups.some((g) => groupCategory(g.parent.name) === "users") && (
+              <button
+                type="button"
+                onClick={() => {
+                  navigateTab("users");
+                  setSidebarOpen(false);
+                }}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
+                  activeTab === "users"
+                    ? "bg-gradient-to-r from-blue-600 via-blue-500 to-sky-400 text-white shadow-[0_0_18px_rgba(56,189,248,0.55)]"
+                    : "text-blue-100/80 hover:bg-blue-500/15 hover:text-white"
+                }`}
+              >
+                <UsersIcon className="h-4 w-4 shrink-0" />
+                <span>User Management</span>
+              </button>
+            )}
+
           {isAdmin && (
             <button
               type="button"
               onClick={() => {
-                setActiveTab("rbac");
+                navigateTab("rbac");
                 setSidebarOpen(false);
               }}
               className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
@@ -540,7 +661,7 @@ export default function DashboardClient() {
             type="button"
             onClick={() => {
               if (profileGroup) {
-                setActiveTab(`group:${profileGroup.parent.id}`);
+                navigateTab(`group:${profileGroup.parent.id}`);
                 setSidebarOpen(false);
               }
             }}
@@ -562,7 +683,7 @@ export default function DashboardClient() {
 
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={requestLogout}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-400/25 bg-white/5 px-3 py-1.5 text-xs font-semibold text-blue-100 transition hover:border-rose-400/50 hover:bg-rose-500/20 hover:text-white"
           >
             <LogoutIcon className="h-3.5 w-3.5" />
@@ -641,7 +762,7 @@ export default function DashboardClient() {
               <button
                 type="button"
                 onClick={() => {
-                  if (profileGroup) setActiveTab(`group:${profileGroup.parent.id}`);
+                  if (profileGroup) navigateTab(`group:${profileGroup.parent.id}`);
                 }}
                 title={profileGroup ? "Open My Profile" : displayName}
                 className={`flex items-center gap-2.5 rounded-full border border-blue-400/30 bg-blue-950/80 py-1 pl-1.5 pr-3 transition ${
@@ -671,6 +792,13 @@ export default function DashboardClient() {
 
           {activeTab === "rbac" && isAdmin ? (
             <RbacManager currentUserRoleId={data.role_id} onSelfAccessUpdated={() => void loadDashboard()} />
+          ) : activeTab === "users" && isAdmin ? (
+            <UserManagementManager
+              currentUserId={Number(data.user.user_id ?? data.user.id ?? 0)}
+              roleId={data.role_id}
+              isAdmin={isAdmin}
+              onDataChanged={() => void loadDashboard()}
+            />
           ) : activeTab === "overview" && data.has_dashboard_access ? (
             <>
               {/* Row 1: Full-Width Hero Welcome Banner */}
@@ -702,9 +830,9 @@ export default function DashboardClient() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (tournamentsGroup) setActiveTab(`group:${tournamentsGroup.parent.id}`);
-                          else if (sidebarGroups[0]) setActiveTab(`group:${sidebarGroups[0].parent.id}`);
-                          else if (isAdmin) setActiveTab("rbac");
+                          if (tournamentsGroup) navigateTab(`group:${tournamentsGroup.parent.id}`);
+                          else if (sidebarGroups[0]) navigateTab(`group:${sidebarGroups[0].parent.id}`);
+                          else if (isAdmin) navigateTab("rbac");
                         }}
                         className="mt-4 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-sky-400 px-5 py-2 text-xs font-bold text-white shadow-[0_0_20px_rgba(56,189,248,0.65)] transition hover:from-blue-500 hover:to-sky-300"
                       >
@@ -731,7 +859,7 @@ export default function DashboardClient() {
                     {tournamentsGroup && (
                       <button
                         type="button"
-                        onClick={() => setActiveTab(`group:${tournamentsGroup.parent.id}`)}
+                        onClick={() => navigateTab(`group:${tournamentsGroup.parent.id}`)}
                         className="rounded-full border border-blue-400/30 bg-blue-950/75 px-3.5 py-1 text-xs font-semibold text-blue-100 transition hover:border-sky-400/60 hover:bg-blue-800/60"
                       >
                         View All →
@@ -755,7 +883,7 @@ export default function DashboardClient() {
                       {canCreateTournament && tournamentsGroup && (
                         <button
                           type="button"
-                          onClick={() => setActiveTab(`group:${tournamentsGroup.parent.id}`)}
+                          onClick={() => navigateTab(`group:${tournamentsGroup.parent.id}`)}
                           className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-600 to-sky-400 px-5 py-2 text-xs font-bold text-white shadow-[0_0_20px_rgba(56,189,248,0.6)] transition hover:from-blue-500 hover:to-sky-300"
                         >
                           Create Tournament →
@@ -810,7 +938,7 @@ export default function DashboardClient() {
                         type="button"
                         onClick={() => {
                           const target = attendanceGroup ?? soaGroup;
-                          if (target) setActiveTab(`group:${target.parent.id}`);
+                          if (target) navigateTab(`group:${target.parent.id}`);
                         }}
                         className="rounded-full border border-blue-400/30 bg-blue-950/75 px-3.5 py-1 text-xs font-semibold text-blue-100 transition hover:border-sky-400/60 hover:bg-blue-800/60"
                       >
@@ -1041,13 +1169,20 @@ export default function DashboardClient() {
                 actions={activeGroup.actions}
                 onProfileUpdated={() => void loadDashboard()}
               />
+            ) : groupCategory(activeGroup.parent.name) === "users" ? (
+              <UserManagementManager
+                currentUserId={Number(data.user.user_id ?? data.user.id ?? 0)}
+                roleId={data.role_id}
+                isAdmin={isAdmin}
+                onDataChanged={() => void loadDashboard()}
+              />
             ) : (
               <ModuleWorkspace
                 group={activeGroup}
                 data={data}
                 isAdmin={isAdmin}
                 onDataChanged={() => void loadDashboard()}
-                onBack={data.has_dashboard_access ? () => setActiveTab("overview") : undefined}
+                onBack={data.has_dashboard_access ? () => navigateTab("overview") : undefined}
               />
             )
           ) : (
@@ -1065,7 +1200,7 @@ export default function DashboardClient() {
               {isAdmin && (
                 <button
                   type="button"
-                  onClick={() => setActiveTab("rbac")}
+                  onClick={() => navigateTab("rbac")}
                   className="mt-5 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-sky-500 px-5 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_rgba(56,189,248,0.5)] hover:from-blue-500 hover:to-sky-400"
                 >
                   <ShieldIcon className="h-4 w-4" />
@@ -1084,7 +1219,7 @@ export default function DashboardClient() {
           {data.has_dashboard_access && (
             <button
               type="button"
-              onClick={() => setActiveTab("overview")}
+              onClick={() => navigateTab("overview")}
               className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-semibold transition ${
                 activeTab === "overview" ? "text-sky-300" : "text-blue-200/70 hover:text-white"
               }`}
@@ -1102,7 +1237,7 @@ export default function DashboardClient() {
               <button
                 key={group.parent.id}
                 type="button"
-                onClick={() => setActiveTab(tabKey)}
+                onClick={() => navigateTab(tabKey)}
                 className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-semibold transition ${
                   active ? "text-sky-300" : "text-blue-200/70 hover:text-white"
                 }`}
@@ -1123,6 +1258,29 @@ export default function DashboardClient() {
           </button>
         </nav>
       </div>
+
+      {/* Session Security & Logout Confirmation Modal */}
+      <ConfirmModal
+        open={logoutConfirmMode !== null}
+        variant="security"
+        icon={<ShieldLockIcon className="h-5 w-5" />}
+        confirmIcon={<LogoutIcon className="h-3.5 w-3.5" />}
+        title={
+          logoutConfirmMode === "back"
+            ? "Stay Signed In or Log Out?"
+            : "Confirm Logout"
+        }
+        message={
+          logoutConfirmMode === "back"
+            ? "For your account security, pressing the browser Back button will not automatically log you out. Stay signed in to continue, or click Log Out to end your session safely."
+            : "Are you sure you want to log out of your ALAB Football Club account? You will need to sign in again to access the portal."
+        }
+        cancelLabel="Stay Signed In"
+        confirmLabel="Log Out"
+        busyLabel="Logging out..."
+        onCancel={() => setLogoutConfirmMode(null)}
+        onConfirm={performLogout}
+      />
     </div>
   );
 }

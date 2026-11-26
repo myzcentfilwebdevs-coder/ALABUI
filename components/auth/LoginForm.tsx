@@ -46,7 +46,7 @@ export default function LoginForm() {
       const token = extractAuthToken(res.data);
       if (token) {
         setAuthToken(token);
-        router.push("/dashboard");
+        router.replace("/dashboard");
       } else if (isOtpRequiredResponse(res.data, res.message)) {
         setNeedsOtp(true);
         setOtp("");
@@ -79,7 +79,7 @@ export default function LoginForm() {
       const token = extractAuthToken(res.data);
       if (token) {
         setAuthToken(token);
-        router.push("/dashboard");
+        router.replace("/dashboard");
         return;
       }
       setNeedsOtp(false);
