@@ -1493,94 +1493,103 @@ export default function TournamentsManager({
                                     return (
                                       <div
                                         key={match.id}
-                                        className="flex flex-col gap-3 px-4 py-3 transition hover:bg-blue-600/10 sm:flex-row sm:items-center sm:justify-between"
+                                        className="space-y-2.5 px-4 py-3.5 transition hover:bg-blue-600/10"
                                       >
-                                        {/* Date Column */}
-                                        <div className="flex items-center justify-between gap-2 sm:w-20 sm:shrink-0 sm:flex-col sm:items-start sm:justify-center">
-                                          <div className="leading-tight">
-                                            <p className="text-xs font-extrabold text-white">
-                                              {dt.monthDay}
-                                            </p>
-                                            <p className="text-[10px] font-medium text-blue-200/70">
-                                              {dt.weekday}
-                                              {match.game_label ? ` • ${match.game_label}` : ""}
-                                            </p>
-                                          </div>
-                                          <span
-                                            className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold sm:hidden ${st.className}`}
-                                          >
-                                            {st.label}
-                                          </span>
-                                        </div>
-
-                                        {/* Center Matchup with Automatic ALAB FC Crest + Club Shield */}
-                                        <div className="flex min-w-0 flex-1 items-center justify-between gap-2 sm:justify-center sm:gap-4">
-                                          <div className="flex min-w-0 flex-1 items-center justify-start gap-2 sm:justify-end">
+                                        {/* Row 1: Full-Width Matchup (Never Truncates Team Names!) */}
+                                        <div className="flex flex-col items-stretch justify-between gap-2.5 sm:flex-row sm:items-center sm:gap-4">
+                                          <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:justify-end sm:text-right">
                                             <TeamCrest name={homeLabel} />
-                                            <span className="truncate text-xs font-bold text-white sm:text-sm">
+                                            <span
+                                              title={homeLabel}
+                                              className="break-words text-sm font-bold leading-snug text-white"
+                                            >
                                               {homeLabel}
                                             </span>
                                           </div>
 
-                                          {hasScore ? (
-                                            <span className="shrink-0 rounded-lg border border-sky-400/50 bg-blue-700/70 px-2.5 py-0.5 font-mono text-xs font-extrabold text-white shadow-[0_0_12px_rgba(56,189,248,0.45)]">
-                                              {match.alab_score} - {match.opponent_score}
-                                            </span>
-                                          ) : (
-                                            <span className="shrink-0 text-xs font-extrabold uppercase tracking-wider text-blue-200/80">
-                                              VS
-                                            </span>
-                                          )}
+                                          <div className="flex shrink-0 items-center justify-center">
+                                            {hasScore ? (
+                                              <span className="rounded-lg border border-sky-400/50 bg-blue-700/70 px-3 py-0.5 font-mono text-xs font-extrabold text-white shadow-[0_0_12px_rgba(56,189,248,0.45)]">
+                                                {match.alab_score} - {match.opponent_score}
+                                              </span>
+                                            ) : (
+                                              <span className="rounded-md border border-blue-400/25 bg-blue-950/80 px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider text-sky-200">
+                                                VS
+                                              </span>
+                                            )}
+                                          </div>
 
-                                          <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:justify-start">
+                                          <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:justify-start sm:text-left">
                                             <TeamCrest name={match.opponent} />
-                                            <span className="truncate text-xs font-bold text-blue-100 sm:text-sm">
+                                            <span
+                                              title={match.opponent}
+                                              className="break-words text-sm font-bold leading-snug text-blue-100"
+                                            >
                                               {match.opponent}
                                             </span>
                                           </div>
                                         </div>
 
-                                        {/* Right: Time + Pitch + Status Pill + Actions */}
-                                        <div className="flex items-center justify-between gap-2 sm:shrink-0 sm:justify-end">
-                                          <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-100/90">
-                                            <ClockIcon className="h-3.5 w-3.5 text-sky-400" />
-                                            <span>{formatMatchTime(match.match_time)}</span>
+                                        {/* Row 2: Date, Game Label, Time, Pitch, Status & Actions */}
+                                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-blue-400/10 pt-2 text-xs">
+                                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-blue-200/85">
+                                            <span className="inline-flex items-center gap-1 font-bold text-white">
+                                              <CalendarIcon className="h-3.5 w-3.5 text-sky-400" />
+                                              {dt.monthDay}
+                                              {dt.weekday ? ` (${dt.weekday})` : ""}
+                                            </span>
+                                            {match.game_label && (
+                                              <span className="rounded bg-blue-900/70 px-1.5 py-0.5 text-[10px] font-bold text-blue-200">
+                                                {match.game_label}
+                                              </span>
+                                            )}
+                                            <span className="inline-flex items-center gap-1 font-semibold text-blue-100/90">
+                                              <ClockIcon className="h-3.5 w-3.5 text-sky-400" />
+                                              {formatMatchTime(match.match_time)}
+                                            </span>
                                             {match.pitch && (
                                               <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-sky-200">
                                                 {match.pitch}
                                               </span>
                                             )}
+                                            {match.remarks && (
+                                              <span className="text-[11px] italic text-blue-200/70">
+                                                • {match.remarks}
+                                              </span>
+                                            )}
                                           </div>
 
-                                          <span
-                                            className={`hidden rounded-full border px-3 py-1 text-[11px] font-bold sm:inline-flex ${st.className}`}
-                                          >
-                                            {st.label}
-                                          </span>
+                                          <div className="flex items-center gap-2">
+                                            <span
+                                              className={`inline-flex rounded-full border px-3 py-0.5 text-[11px] font-bold ${st.className}`}
+                                            >
+                                              {st.label}
+                                            </span>
 
-                                          {canEdit && (
-                                            <div className="flex items-center gap-1">
-                                              <button
-                                                type="button"
-                                                onClick={() => openEditMatchModal(match)}
-                                                title="Edit match or enter score"
-                                                aria-label="Edit match"
-                                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue-400/25 bg-[#06184a] text-blue-200 transition hover:border-sky-400 hover:text-white"
-                                              >
-                                                <EditIcon className="h-3.5 w-3.5" />
-                                              </button>
-                                              <button
-                                                type="button"
-                                                disabled={busyId === `del-match-${match.id}`}
-                                                onClick={() => void handleDeleteMatch(match)}
-                                                title="Delete match"
-                                                aria-label="Delete match"
-                                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-400/30 bg-rose-500/10 text-rose-300 transition hover:bg-rose-500/25 hover:text-white disabled:opacity-50"
-                                              >
-                                                <TrashIcon className="h-3.5 w-3.5" />
-                                              </button>
-                                            </div>
-                                          )}
+                                            {canEdit && (
+                                              <div className="flex items-center gap-1">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => openEditMatchModal(match)}
+                                                  title="Edit match or enter score"
+                                                  aria-label="Edit match"
+                                                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue-400/25 bg-[#06184a] text-blue-200 transition hover:border-sky-400 hover:text-white"
+                                                >
+                                                  <EditIcon className="h-3.5 w-3.5" />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  disabled={busyId === `del-match-${match.id}`}
+                                                  onClick={() => void handleDeleteMatch(match)}
+                                                  title="Delete match"
+                                                  aria-label="Delete match"
+                                                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-400/30 bg-rose-500/10 text-rose-300 transition hover:bg-rose-500/25 hover:text-white disabled:opacity-50"
+                                                >
+                                                  <TrashIcon className="h-3.5 w-3.5" />
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
                                     );
