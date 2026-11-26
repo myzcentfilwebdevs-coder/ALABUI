@@ -622,10 +622,19 @@ export default function TournamentsManager({
         const res = await deleteTournament(item.id);
         setBusyId(null);
 
-        if (res.ok) {
-          setToast({ type: "success", message: `Deleted "${item.title}".` });
-          setSelectedId(null);
-          setDetail(null);
+        if (res.ok || res.status === 404) {
+          setToast({
+            type: "success",
+            message:
+              res.status === 404
+                ? `"${item.title}" was already removed from the database. List refreshed.`
+                : `Permanently deleted "${item.title}".`,
+          });
+          setTournaments((prev) => prev.filter((t) => t.id !== item.id));
+          if (selectedId === item.id) {
+            setSelectedId(null);
+            setDetail(null);
+          }
           await loadAll();
           if (onDataChanged) onDataChanged();
         } else {
@@ -753,8 +762,12 @@ export default function TournamentsManager({
         setBusyId(`del-match-${match.id}`);
         const res = await deleteTournamentMatch(match.id);
         setBusyId(null);
-        if (res.ok) {
-          setToast({ type: "success", message: "Match deleted." });
+        if (res.ok || res.status === 404) {
+          setToast({
+            type: "success",
+            message:
+              res.status === 404 ? "Match was already removed. Schedule refreshed." : "Match deleted.",
+          });
           await loadDetail(tournamentId);
         } else {
           setToast({ type: "error", message: res.message || "Failed to delete match." });
@@ -833,8 +846,14 @@ export default function TournamentsManager({
         setBusyId(`rem-roster-${rosterId}`);
         const res = await removeRosterPlayer(rosterId);
         setBusyId(null);
-        if (res.ok) {
-          setToast({ type: "success", message: `Removed ${playerName}.` });
+        if (res.ok || res.status === 404) {
+          setToast({
+            type: "success",
+            message:
+              res.status === 404
+                ? `${playerName} was already removed. Roster refreshed.`
+                : `Removed ${playerName}.`,
+          });
           await loadDetail(tournamentId);
         } else {
           setToast({ type: "error", message: res.message || "Failed to remove player." });
