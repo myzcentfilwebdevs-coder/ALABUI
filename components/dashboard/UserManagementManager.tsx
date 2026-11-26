@@ -352,16 +352,12 @@ export default function UserManagementManager({
                 </span>
               </div>
               <p className="mt-0.5 text-xs text-blue-100/80 sm:text-sm">
-                Assign club roles and manage account status with instant real-time permission sync.
+                Assign club roles and manage member account status.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5">
-            <span className="hidden items-center gap-1.5 rounded-xl border border-emerald-400/35 bg-emerald-500/15 px-3 py-2 text-[11px] font-bold text-emerald-200 sm:inline-flex">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
-              Real-Time RBAC
-            </span>
             <button
               type="button"
               onClick={() => void loadUsers()}
