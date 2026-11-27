@@ -33,7 +33,7 @@ import CustomSelect from "@/components/ui/CustomSelect";
 import CustomDatePicker from "@/components/ui/CustomDatePicker";
 
 type ViewMode = "daily" | "history-month" | "history-all";
-type StatusFilter = "all" | "Present" | "Late" | "Absent" | "Excused" | "unmarked";
+type StatusFilter = "all" | "Present" | "Absent" | "unmarked";
 
 const STATUS_META: Record<
   Exclude<AttendanceStatus, "">,
@@ -196,7 +196,7 @@ export default function AttendanceManager({
     setEditingPlayer(player);
     setModalPlayerId(player.player_user_id);
     setModalDate(targetDate || date);
-    setModalStatus(player.status || "Present");
+    setModalStatus(player.status === "Absent" ? "Absent" : "Present");
     setModalRemarks(player.remarks || "");
     setMarkModalOpen(true);
   }
@@ -240,7 +240,7 @@ export default function AttendanceManager({
       status: p.today_status,
       attended: p.attended_today,
       check_in_time: p.history[0]?.check_in_time ?? null,
-      remarks: `${p.summary.present}P / ${p.summary.absent}A / ${p.summary.late}L`,
+      remarks: `${p.summary.present}P / ${p.summary.absent}A`,
       attendance_rate: p.summary.attendance_rate,
       total_sessions: p.summary.total,
       rawDaily: null as DailyAttendancePlayer | null,
@@ -284,7 +284,7 @@ export default function AttendanceManager({
   const stats = useMemo(() => {
     if (viewMode === "daily" && daily) {
       const total = daily.summary.total_players;
-      const present = daily.summary.present + daily.summary.late;
+      const present = daily.summary.present;
       const absent = daily.summary.absent;
       const unmarked = daily.summary.unmarked;
       const presentRate = total > 0 ? Math.round((present / total) * 1000) / 10 : 0;
@@ -293,7 +293,7 @@ export default function AttendanceManager({
         total,
         present,
         absent,
-        extraCount: daily.summary.late + daily.summary.excused,
+        extraCount: 0,
         unmarked,
         presentRate,
         absentRate,
@@ -590,7 +590,7 @@ export default function AttendanceManager({
               label={viewMode === "daily" ? "Unmarked" : "Total Logs"}
               value={String(viewMode === "daily" ? stats.unmarked : stats.extraCount)}
               valueClass="text-white"
-              sub={viewMode === "daily" ? `${stats.extraCount} Late / Excused` : "Recorded Sessions"}
+              sub={viewMode === "daily" ? "Not yet marked" : "Recorded Sessions"}
             />
           </div>
 
@@ -662,7 +662,7 @@ export default function AttendanceManager({
                   {selectedIds.size} player(s) selected
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {(["Present", "Late", "Absent", "Excused"] as const).map((st) => (
+                  {(["Present", "Absent"] as const).map((st) => (
                     <button
                       key={st}
                       type="button"
@@ -1121,19 +1121,9 @@ export default function AttendanceManager({
                     icon: <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />,
                   },
                   {
-                    value: "Late",
-                    label: "Late",
-                    icon: <span className="h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]" />,
-                  },
-                  {
                     value: "Absent",
                     label: "Absent",
                     icon: <span className="h-2.5 w-2.5 rounded-full bg-rose-400 shadow-[0_0_8px_#fb7185]" />,
-                  },
-                  {
-                    value: "Excused",
-                    label: "Excused",
-                    icon: <span className="h-2.5 w-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]" />,
                   },
                   {
                     value: "unmarked",
@@ -1293,7 +1283,7 @@ export default function AttendanceManager({
               <div>
                 <label className="mb-2 block text-xs font-semibold text-blue-200">Status</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {(["Present", "Late", "Absent", "Excused"] as const).map((st) => (
+                  {(["Present", "Absent"] as const).map((st) => (
                     <button
                       key={st}
                       type="button"

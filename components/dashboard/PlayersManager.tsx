@@ -26,7 +26,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ClipboardCheckIcon,
-  ClockIcon,
   CloseIcon,
   EyeIcon,
   HistoryIcon,
@@ -338,9 +337,9 @@ export default function PlayersManager({
       }
     }
 
-    const statsTotal = present + absent + late + excused;
+    const statsTotal = present + absent;
     const statsRate =
-      statsTotal > 0 ? Math.round(((present + late) / statsTotal) * 100) : 0;
+      statsTotal > 0 ? Math.round((present / statsTotal) * 100) : 0;
 
     setQuickStats({
       present,
@@ -763,18 +762,20 @@ export default function PlayersManager({
               </div>
               <form method="post" onSubmit={handleQuickMarkSubmit} className="space-y-4 p-5">
                 <div className="grid grid-cols-2 gap-2">
-                  {(["Present", "Late", "Absent", "Excused"] as const).map((st) => (
+                  {(["Present", "Absent"] as const).map((st) => (
                     <button
                       key={st}
                       type="button"
                       onClick={() => setQuickMarkStatus(st)}
                       className={`rounded-xl border py-2.5 text-xs font-bold transition ${
                         quickMarkStatus === st
-                          ? "border-sky-400 bg-blue-600 text-white shadow-[0_0_14px_rgba(56,189,248,0.5)]"
+                          ? st === "Present"
+                            ? "border-emerald-400 bg-emerald-500 text-white shadow-[0_0_14px_rgba(16,185,129,0.55)]"
+                            : "border-rose-400 bg-rose-500 text-white shadow-[0_0_14px_rgba(244,63,94,0.55)]"
                           : "border-blue-400/25 bg-[#040f30] text-blue-200 hover:text-white"
                       }`}
                     >
-                      {st}
+                      {st === "Present" ? "✓ Present" : "✕ Absent"}
                     </button>
                   ))}
                 </div>
@@ -1773,7 +1774,7 @@ export default function PlayersManager({
             </div>
           </div>
 
-          {/* 4 Breakdown Rows */}
+          {/* Breakdown Rows (Present & Absent Only) */}
           <div className="space-y-3 border-t border-blue-400/15 pt-4 text-xs">
             <QuickStatRow
               icon={<CheckIcon className="h-3.5 w-3.5" />}
@@ -1788,16 +1789,10 @@ export default function PlayersManager({
               count={quickStats.absent}
             />
             <QuickStatRow
-              icon={<ClockIcon className="h-3.5 w-3.5" />}
-              iconClass="bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/40"
-              label="Late"
-              count={quickStats.late}
-            />
-            <QuickStatRow
               icon={<InfoIcon className="h-3.5 w-3.5" />}
               iconClass="bg-sky-500/20 text-sky-300 ring-1 ring-sky-400/40"
-              label="Excused"
-              count={quickStats.excused}
+              label="Total Logs"
+              count={quickStats.total}
             />
           </div>
         </div>

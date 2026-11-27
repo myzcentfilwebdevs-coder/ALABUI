@@ -41,27 +41,27 @@ type SelectFieldProps = SelectHTMLAttributes<HTMLSelectElement> & {
 
 function inputClass(error: string | undefined, hasIcon: boolean, extra = "") {
   return [
-    "block w-full rounded-lg border bg-[#eef2fb] py-2 text-sm text-slate-900",
+    "block w-full rounded-lg border bg-[#eef2fb] py-1.5 text-xs text-slate-900 xl:py-2 xl:text-sm",
     "placeholder:text-slate-500 transition focus:bg-white focus:outline-none focus:ring-4",
-    hasIcon ? "pl-10" : "pl-3.5",
+    hasIcon ? "pl-8 xl:pl-10" : "pl-3 xl:pl-3.5",
     error
       ? "border-red-400 focus:border-red-500 focus:ring-red-100"
       : "border-transparent focus:border-blue-500 focus:ring-blue-100",
-    extra || "pr-3.5",
+    extra || "pr-2.5 xl:pr-3.5",
   ].join(" ");
 }
 
 function FieldIcon({ icon }: { icon?: ReactNode }) {
   if (!icon) return null;
   return (
-    <span className="pointer-events-none absolute inset-y-0 left-0 flex w-10 items-center justify-center text-[#0b2a6b]">
+    <span className="pointer-events-none absolute inset-y-0 left-0 flex w-8 items-center justify-center text-[#0b2a6b] xl:w-10">
       {icon}
     </span>
   );
 }
 
 function FieldError({ error }: { error?: string }) {
-  return error ? <p className="mt-1 pl-1 text-xs text-red-600">{error}</p> : null;
+  return error ? <p className="mt-0.5 pl-1 text-[10px] leading-tight text-red-600 sm:text-xs">{error}</p> : null;
 }
 
 export function TextField({ label, icon, error, id, name, placeholder, className, ...props }: FieldProps) {
@@ -175,7 +175,7 @@ export function SelectField({
           className={inputClass(
             error,
             !!icon,
-            `flex items-center justify-between pr-9 text-left ${
+            `flex items-center justify-between pr-7 text-left sm:pr-9 ${
               open ? "border-blue-500 bg-white ring-4 ring-blue-100" : ""
             } ${isEmpty ? "text-slate-500" : "font-medium text-slate-900"}`
           )}
@@ -257,16 +257,16 @@ export function PasswordField({ label, icon, error, id, name, placeholder, class
           placeholder={placeholder ?? label}
           aria-invalid={!!error}
           suppressHydrationWarning
-          className={inputClass(error, !!icon, "pr-11")}
+          className={inputClass(error, !!icon, "pr-8 sm:pr-11")}
           {...props}
         />
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? "Hide password" : "Show password"}
-          className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-700"
+          className="absolute inset-y-0 right-0 flex items-center px-2 text-slate-400 hover:text-slate-700 sm:px-3"
         >
-          {visible ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+          {visible ? <EyeOffIcon className="h-4 w-4 sm:h-5 sm:w-5" /> : <EyeIcon className="h-4 w-4 sm:h-5 sm:w-5" />}
         </button>
       </div>
       <FieldError error={error} />
@@ -287,12 +287,12 @@ export function Checkbox({
 }) {
   return (
     <div>
-      <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-700">
+      <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700 sm:gap-3 sm:text-sm">
         <input
           type="checkbox"
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
-          className="h-5 w-5 cursor-pointer rounded-full border-slate-400 accent-blue-600"
+          className="h-4 w-4 cursor-pointer rounded-full border-slate-400 accent-blue-600 sm:h-5 sm:w-5"
         />
         <span>{children}</span>
       </label>
@@ -318,7 +318,7 @@ export function SubmitButton({
       type="submit"
       disabled={loading || !hydrated}
       suppressHydrationWarning
-      className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-b from-blue-500 to-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(37,99,235,0.8)] transition hover:from-blue-600 hover:to-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-70 sm:text-base"
+      className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-b from-blue-500 to-blue-700 px-4 py-1.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(37,99,235,0.8)] transition hover:from-blue-600 hover:to-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-70 xl:py-2.5 xl:text-base"
     >
       {loading ? (
         <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">

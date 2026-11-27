@@ -14,7 +14,6 @@ import {
   BarChartIcon,
   CalendarIcon,
   CheckIcon,
-  ClockIcon,
   CloseIcon,
   DownloadIcon,
   HomeIcon,
@@ -257,7 +256,7 @@ export default function PlayerAttendanceDetail({
 
   const attendanceRate =
     summary.total > 0
-      ? Math.round(((summary.present + summary.late) / summary.total) * 1000) / 10
+      ? Math.round((summary.present / summary.total) * 1000) / 10
       : 0;
 
   const displayName =
@@ -451,8 +450,8 @@ export default function PlayerAttendanceDetail({
           </div>
         </div>
 
-        {/* 4 Colored Stat Cards */}
-        <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4 xl:col-span-7">
+        {/* 3 Colored Stat Cards (Present & Absent Only) */}
+        <div className="grid grid-cols-3 gap-3.5 xl:col-span-7">
           <StatBox
             icon={<CalendarIcon className="h-5 w-5" />}
             iconBg="bg-sky-400/30 text-white"
@@ -477,14 +476,6 @@ export default function PlayerAttendanceDetail({
             label="Absent"
             sub={`of ${summary.total} sessions`}
           />
-          <StatBox
-            icon={<ClockIcon className="h-5 w-5" />}
-            iconBg="bg-violet-400/30 text-white"
-            boxStyle="border-violet-400/55 bg-gradient-to-br from-violet-600/80 via-purple-800/70 to-[#140a38]"
-            value={String(summary.late)}
-            label="Late"
-            sub={`of ${summary.total} sessions`}
-          />
         </div>
       </section>
 
@@ -503,12 +494,6 @@ export default function PlayerAttendanceDetail({
               </span>
               <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-0.5 text-rose-300">
                 ✕ Absent
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-amber-300">
-                ◔ Late
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/40 bg-sky-500/15 px-2 py-0.5 text-sky-300">
-                ★ Excused
               </span>
             </div>
           </div>
@@ -767,12 +752,8 @@ export default function PlayerAttendanceDetail({
               Absent <strong className="text-white">{summary.absent}</strong>
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-amber-400" />
-              Late <strong className="text-white">{summary.late}</strong>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-sky-400" />
-              Excused <strong className="text-white">{summary.excused}</strong>
+              Total Sessions <strong className="text-white">{summary.total}</strong>
             </span>
           </div>
         </div>

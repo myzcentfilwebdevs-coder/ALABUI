@@ -12,27 +12,29 @@ const SOCIALS = [
 export default function SiteFooter() {
   return (
     <footer className="relative shrink-0 border-t border-blue-500/40 bg-[#020a22] shadow-[0_-4px_30px_rgba(37,99,235,0.2)]">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-2.5 sm:px-6">
-        <div className="flex items-center gap-2.5">
-          <Image src={crest} alt="ALAB Football Club crest" className="h-9 w-auto" />
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3.5 py-1.5 sm:gap-3 sm:px-6 sm:py-2">
+        <div className="hidden items-center gap-2 md:flex">
+          <Image src={crest} alt="ALAB Football Club crest" className="h-8 w-auto xl:h-9" />
           <div className="font-display uppercase italic leading-none">
-            <span className="block text-lg font-extrabold">ALAB Football Club</span>
-            <span className="block text-xs font-semibold normal-case text-blue-100/75">Keep the fire burning</span>
+            <span className="block text-base font-extrabold xl:text-lg">ALAB Football Club</span>
+            <span className="block text-[11px] font-semibold normal-case text-blue-100/75 xl:text-xs">Keep the fire burning</span>
           </div>
         </div>
 
-        <p className="text-xs text-blue-100/60">© 2026 ALAB Football Club. All Rights Reserved.</p>
+        <p className="truncate text-[11px] text-blue-100/65 sm:text-xs">
+          © 2026 ALAB Football Club.
+        </p>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {SOCIALS.map(({ label, href, Icon }) => (
               <a
                 key={label}
                 href={href}
                 aria-label={label}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-blue-600"
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-blue-600 sm:h-7 sm:w-7"
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
               </a>
             ))}
           </div>

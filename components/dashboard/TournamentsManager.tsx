@@ -2313,7 +2313,7 @@ export default function TournamentsManager({
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <div>
                   <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-blue-200">
                     <CalendarIcon className="h-3.5 w-3.5 text-sky-400" />

@@ -14,6 +14,7 @@ export const API_ENV: "local" | "main" =
 
 export const AUTH_ENDPOINTS = {
   register: `${API_BASE_URL}/api/auth/register`,
+  registrationStatus: `${API_BASE_URL}/api/auth/registration-status`,
   verifyOtp: `${API_BASE_URL}/api/auth/verify-otp`,
   login: `${API_BASE_URL}/api/auth/login`,
   forgotPassword: `${API_BASE_URL}/api/auth/forgot-password`,
@@ -151,6 +152,10 @@ export function extractAuthenticatorSetup(data: unknown): AuthenticatorSetup {
         if (!result.qrCode && /qr/i.test(key)) {
           if (/^https?:\/\//i.test(trimmed)) {
             result.qrCode = trimmed;
+            continue;
+          }
+          if (trimmed.startsWith("/")) {
+            result.qrCode = `${API_BASE_URL}${trimmed}`;
             continue;
           }
           if (trimmed.startsWith("iVBOR")) {
@@ -329,6 +334,60 @@ async function requestJson<T = unknown>(
       data: null as T,
       message: `Unable to reach ${API_BASE_URL}. Make sure your backend server is running and CORS is enabled.`,
       endpoint: `POST ${getEndpointPath(url)}`,
+    };
+  }
+}
+
+export function extractEmailVerifiedFlag(data: unknown): boolean | null {
+  if (!data || typeof data !== "object") return null;
+  const record = data as Record<string, unknown>;
+  for (const key of ["email_verified", "emailVerified", "is_email_verified", "verified"]) {
+    if (typeof record[key] === "boolean") return record[key] as boolean;
+  }
+  if (record.data && typeof record.data === "object") {
+    return extractEmailVerifiedFlag(record.data);
+  }
+  return null;
+}
+
+export interface RegistrationStatusData {
+  email_verified: boolean;
+  authSetup: AuthenticatorSetup;
+  message: string;
+}
+
+export async function fetchRegistrationStatus(
+  usernameOrEmail: string
+): Promise<ApiResult<RegistrationStatusData>> {
+  const qs = new URLSearchParams({ username_or_email: usernameOrEmail.trim() });
+  const url = `${AUTH_ENDPOINTS.registrationStatus}?${qs.toString()}`;
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const parsed = await parseApiResponse<Record<string, unknown>>(response, "GET", url);
+    const raw = parsed.data && typeof parsed.data === "object" ? parsed.data : {};
+    const flag = extractEmailVerifiedFlag(raw);
+    const authSetup = extractAuthenticatorSetup(raw);
+    const emailVerified = flag === true || Boolean(authSetup.qrCode || authSetup.secret);
+
+    return {
+      ...parsed,
+      data: {
+        email_verified: emailVerified,
+        authSetup,
+        message: parsed.message,
+      },
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      data: { email_verified: false, authSetup: {}, message: "Unable to check verification status." },
+      message: `Unable to reach ${API_BASE_URL}. Make sure your backend server is running.`,
+      endpoint: `GET ${getEndpointPath(url)}`,
     };
   }
 }

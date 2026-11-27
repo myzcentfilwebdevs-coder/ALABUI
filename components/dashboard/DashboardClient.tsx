@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import crest from "@/app/logo/logoALAB.png";
 import alabBall from "@/app/logo/ball.png";
 import stadiumBg from "@/app/logo/backgoundimage.png";
+import sidebarBg from "@/app/logo/backgroundsidebarimage.png";
 import {
   clearAuthToken,
   fetchDailyAttendance,
@@ -106,7 +107,7 @@ function ModuleIcon({ name, className }: { name: string; className?: string }) {
   if (/soa|bill|payment|finance|fee|invoice/.test(n)) return <ReceiptIcon className={className} />;
   if (/gallery|photo|media/.test(n)) return <ImageIcon className={className} />;
   if (/announcement|news|notice/.test(n)) return <MegaphoneIcon className={className} />;
-  if (/setting|config/.test(n)) return <SettingsIcon className={className} />;
+  if (/user\s*management|manage\s*user|setting|config/.test(n)) return <SettingsIcon className={className} />;
   if (/rbac|role|permission|access|admin/.test(n)) return <CrownIcon className={className} />;
   if (/player|child|team|coach|roster|member|user/.test(n)) return <UsersIcon className={className} />;
   if (/profile|account/.test(n)) return <UserIcon className={className} />;
@@ -315,9 +316,9 @@ export default function DashboardClient() {
 
   const attendanceSummary = useMemo(() => {
     if (todayAttendanceSummary && todayAttendanceSummary.total_players > 0) {
-      const present = todayAttendanceSummary.present + todayAttendanceSummary.late;
+      const present = todayAttendanceSummary.present;
       const absent = todayAttendanceSummary.absent;
-      const marked = present + absent + todayAttendanceSummary.excused;
+      const marked = present + absent;
       const denom = marked > 0 ? marked : todayAttendanceSummary.total_players;
       const rate = denom > 0 ? Math.round((present / denom) * 100) : 0;
       return { present, absent, total: denom, rate };
@@ -523,41 +524,58 @@ export default function DashboardClient() {
 
   function renderSidebarContent() {
     if (!data) return null;
+    const activeNavClass =
+      "border border-sky-300/80 bg-gradient-to-r from-[#0ea5e9] via-[#1d6bf3] to-[#38bdf8] text-white shadow-[0_0_24px_rgba(56,189,248,0.68),inset_0_1px_0_rgba(255,255,255,0.35)]";
+    const idleNavClass =
+      "border border-transparent text-blue-100/85 hover:border-sky-400/25 hover:bg-blue-500/20 hover:text-white";
+
     return (
-      <div className="relative flex h-full flex-col overflow-hidden border-r border-blue-400/20 bg-gradient-to-b from-[#040d2a] via-[#051238] to-[#03091f] text-white">
-        {/* Subtle top crest ambient glow */}
-        <div className="pointer-events-none absolute -top-10 left-1/2 h-32 w-44 -translate-x-1/2 rounded-full bg-blue-500/20 blur-2xl" />
+      <div className="relative flex h-full flex-col overflow-hidden border-r border-sky-400/50 bg-[#041038] text-white shadow-[2px_0_26px_rgba(56,189,248,0.28)]">
+        {/* Stadium & Neon Streak Sidebar Background */}
+        <Image
+          src={sidebarBg}
+          alt=""
+          fill
+          priority
+          sizes="260px"
+          className="pointer-events-none object-cover object-left opacity-80"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#041240]/76 via-[#051442]/78 to-[#020922]/88" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(56,189,248,0.16)_0%,transparent_26%,transparent_72%,rgba(37,99,235,0.3)_84%,rgba(56,189,248,0.2)_90%,transparent_96%)]" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-sky-300/70 via-blue-400/45 to-sky-300/70" />
 
         {/* Compact Crest + Brand */}
-        <div className="relative shrink-0 px-4 pb-2.5 pt-3.5 text-center">
+        <div className="alab-sidebar-head relative shrink-0 px-3 pb-1.5 pt-2.5 text-center xl:px-4 xl:pb-3 xl:pt-4">
           <button
             type="button"
             onClick={() => setSidebarOpen(false)}
             aria-label="Close sidebar"
-            className="absolute right-2.5 top-2.5 rounded-lg p-1.5 text-blue-200 hover:bg-white/10 lg:hidden"
+            className="absolute right-2 top-2 rounded-lg p-1.5 text-blue-200 hover:bg-white/10 lg:hidden"
           >
-            <CloseIcon className="h-5 w-5" />
+            <CloseIcon className="h-4 w-4" />
           </button>
           <Image
             src={crest}
             alt="ALAB Football Club"
             priority
-            className="mx-auto h-14 w-auto drop-shadow-[0_0_20px_rgba(59,130,246,0.6)]"
+            className="alab-sidebar-crest mx-auto h-10 w-auto drop-shadow-[0_0_20px_rgba(56,189,248,0.68)] xl:h-16"
           />
-          <div className="mt-1.5 font-display uppercase italic leading-none">
-            <span className="block text-xl font-extrabold tracking-wider text-white">ALAB</span>
-            <span className="mt-0.5 block text-[10px] font-bold tracking-[0.16em] text-blue-100/90">
+          <div className="mt-1 font-display uppercase italic leading-none xl:mt-2">
+            <span className="block text-base font-extrabold tracking-wider text-white drop-shadow-xs xl:text-xl">
+              ALAB
+            </span>
+            <span className="mt-0.5 block text-[9px] font-bold tracking-[0.16em] text-white/95 xl:text-[11px]">
               Football Club
             </span>
           </div>
-          <p className="mt-0.5 text-[10px] font-medium italic text-blue-200/70">
+          <p className="alab-sidebar-tagline mt-0.5 text-[9.5px] font-medium italic text-sky-300/95 xl:mt-1 xl:text-[11px]">
             Keep the fire burning
           </p>
-          <div className="mx-auto mt-2.5 h-px w-full bg-gradient-to-r from-transparent via-blue-400/25 to-transparent" />
+          <div className="alab-sidebar-divider mx-auto mt-2 h-px w-full bg-gradient-to-r from-transparent via-sky-400/35 to-transparent xl:mt-3" />
         </div>
 
-        {/* Clean Top-Level Navigation (Fits cleanly without clipping or ugly scrollbars) */}
-        <nav className="sidebar-scroll relative flex-1 space-y-0.5 overflow-y-auto px-3 py-1">
+        {/* Clean Top-Level Navigation (Fits without scrolling on tablet & desktop) */}
+        <nav className="alab-sidebar-nav sidebar-scroll relative flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-0.5 xl:gap-1 xl:px-3 xl:py-1">
           {data.has_dashboard_access && (
             <button
               type="button"
@@ -565,13 +583,11 @@ export default function DashboardClient() {
                 navigateTab("overview");
                 setSidebarOpen(false);
               }}
-              className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
-                activeTab === "overview"
-                  ? "bg-gradient-to-r from-blue-600 via-blue-500 to-sky-400 text-white shadow-[0_0_18px_rgba(56,189,248,0.55)]"
-                  : "text-blue-100/80 hover:bg-blue-500/15 hover:text-white"
+              className={`alab-sidebar-item flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-[12.5px] font-semibold transition xl:gap-3 xl:px-3.5 xl:py-2.5 xl:text-[13.5px] ${
+                activeTab === "overview" ? activeNavClass : idleNavClass
               }`}
             >
-              <HomeIcon className="h-4 w-4 shrink-0" />
+              <HomeIcon className="h-4 w-4 shrink-0 xl:h-[18px] xl:w-[18px]" />
               <span>Dashboard</span>
             </button>
           )}
@@ -587,13 +603,11 @@ export default function DashboardClient() {
                   navigateTab(tabKey);
                   setSidebarOpen(false);
                 }}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
-                  active
-                    ? "bg-gradient-to-r from-blue-600 via-blue-500 to-sky-400 text-white shadow-[0_0_18px_rgba(56,189,248,0.55)]"
-                    : "text-blue-100/80 hover:bg-blue-500/15 hover:text-white"
+                className={`alab-sidebar-item flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-[12.5px] font-semibold transition xl:gap-3 xl:px-3.5 xl:py-2.5 xl:text-[13.5px] ${
+                  active ? activeNavClass : idleNavClass
                 }`}
               >
-                <ModuleIcon name={group.parent.name} className="h-4 w-4 shrink-0" />
+                <ModuleIcon name={group.parent.name} className="h-4 w-4 shrink-0 xl:h-[18px] xl:w-[18px]" />
                 <span className="truncate">{group.parent.name}</span>
               </button>
             );
@@ -607,13 +621,11 @@ export default function DashboardClient() {
                   navigateTab("users");
                   setSidebarOpen(false);
                 }}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
-                  activeTab === "users"
-                    ? "bg-gradient-to-r from-blue-600 via-blue-500 to-sky-400 text-white shadow-[0_0_18px_rgba(56,189,248,0.55)]"
-                    : "text-blue-100/80 hover:bg-blue-500/15 hover:text-white"
+                className={`alab-sidebar-item flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-[12.5px] font-semibold transition xl:gap-3 xl:px-3.5 xl:py-2.5 xl:text-[13.5px] ${
+                  activeTab === "users" ? activeNavClass : idleNavClass
                 }`}
               >
-                <UsersIcon className="h-4 w-4 shrink-0" />
+                <SettingsIcon className="h-4 w-4 shrink-0 xl:h-[18px] xl:w-[18px]" />
                 <span>User Management</span>
               </button>
             )}
@@ -625,15 +637,13 @@ export default function DashboardClient() {
                 navigateTab("rbac");
                 setSidebarOpen(false);
               }}
-              className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition ${
-                activeTab === "rbac"
-                  ? "bg-gradient-to-r from-blue-600 via-blue-500 to-sky-400 text-white shadow-[0_0_18px_rgba(56,189,248,0.55)]"
-                  : "text-blue-100/85 hover:bg-blue-500/15 hover:text-white"
+              className={`alab-sidebar-item flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-[12.5px] font-semibold transition xl:gap-3 xl:px-3.5 xl:py-2.5 xl:text-[13.5px] ${
+                activeTab === "rbac" ? activeNavClass : idleNavClass
               }`}
             >
               <CrownIcon
-                className={`h-4 w-4 shrink-0 ${
-                  activeTab === "rbac" ? "text-white" : "text-amber-400"
+                className={`h-4 w-4 shrink-0 xl:h-[18px] xl:w-[18px] ${
+                  activeTab === "rbac" ? "text-white" : "text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.65)]"
                 }`}
               />
               <span>Admin Panel</span>
@@ -641,52 +651,29 @@ export default function DashboardClient() {
           )}
         </nav>
 
-        {/* Compact Bottom Slogan + User + Logout */}
-        <div className="relative shrink-0 space-y-2 border-t border-blue-400/15 px-3 py-2.5">
-          <div className="relative overflow-hidden rounded-xl border border-blue-400/30 bg-gradient-to-br from-[#06184c] via-[#09236b] to-[#051238] px-3 py-2.5">
+        {/* Bottom Slogan + Logout */}
+        <div className="alab-sidebar-foot relative flex shrink-0 flex-col gap-1.5 border-t border-sky-400/20 px-2.5 py-2 xl:gap-2.5 xl:px-3 xl:py-3">
+          <div className="alab-sidebar-slogan relative overflow-hidden rounded-xl border border-sky-400/50 bg-gradient-to-br from-[#061c5c]/90 via-[#0a2c85]/85 to-[#04113a]/95 px-3 py-2 shadow-[0_0_22px_rgba(37,99,235,0.4)] xl:px-3.5 xl:py-3">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-300/75 to-transparent" />
             <Image
               src={alabBall}
               alt="ALAB Football"
-              className="pointer-events-none absolute -bottom-2 -right-2 h-14 w-14 object-contain drop-shadow-[0_0_14px_rgba(56,189,248,0.65)]"
+              className="alab-sidebar-ball pointer-events-none absolute -bottom-2 -right-2 h-11 w-11 object-contain drop-shadow-[0_0_16px_rgba(56,189,248,0.75)] xl:h-16 xl:w-16"
             />
-            <p className="relative font-display text-base font-bold italic leading-tight text-white">
+            <p className="relative font-display text-sm font-extrabold italic leading-tight text-white drop-shadow-xs xl:text-base">
               One Team.
               <br />
               One Goal.
             </p>
-            <span className="relative mt-1 block h-0.5 w-14 rounded-full bg-gradient-to-r from-sky-400 to-transparent" />
+            <span className="relative mt-1 block h-0.5 w-11 rounded-full bg-gradient-to-r from-sky-300 to-transparent xl:mt-1.5 xl:w-14" />
           </div>
 
           <button
             type="button"
-            onClick={() => {
-              if (profileGroup) {
-                navigateTab(`group:${profileGroup.parent.id}`);
-                setSidebarOpen(false);
-              }
-            }}
-            className={`flex w-full items-center justify-between gap-2 rounded-xl border border-blue-400/20 bg-blue-950/70 px-2.5 py-1.5 text-left transition ${
-              profileGroup ? "hover:border-sky-400/50 hover:bg-blue-900/60" : "cursor-default"
-            }`}
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-sky-400 text-xs font-bold text-white shadow-[0_0_10px_rgba(56,189,248,0.45)]">
-                {displayName.charAt(0).toUpperCase()}
-              </span>
-              <div className="min-w-0 leading-tight">
-                <p className="truncate text-xs font-bold text-white">{displayName}</p>
-                <p className="truncate text-[10px] text-blue-200/75">{data.role_name}</p>
-              </div>
-            </div>
-            {profileGroup && <ChevronDownIcon className="h-3.5 w-3.5 shrink-0 text-blue-300/70" />}
-          </button>
-
-          <button
-            type="button"
             onClick={requestLogout}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-400/25 bg-white/5 px-3 py-1.5 text-xs font-semibold text-blue-100 transition hover:border-rose-400/50 hover:bg-rose-500/20 hover:text-white"
+            className="alab-sidebar-logout flex w-full items-center justify-center gap-2 rounded-xl border border-sky-400/35 bg-[#04123b]/80 px-3 py-1.5 text-xs font-semibold text-blue-100 shadow-[inset_0_1px_0_rgba(186,230,253,0.12)] transition hover:border-rose-400/60 hover:bg-rose-500/20 hover:text-white xl:py-2"
           >
-            <LogoutIcon className="h-3.5 w-3.5" />
+            <LogoutIcon className="h-3.5 w-3.5 xl:h-4 xl:w-4" />
             Logout
           </button>
         </div>
@@ -695,9 +682,22 @@ export default function DashboardClient() {
   }
 
   return (
-    <div className="dash-bg flex min-h-dvh text-white">
-      {/* Desktop Sidebar */}
-      <aside className="hidden w-60 shrink-0 lg:block">
+    <div className="dash-bg relative flex min-h-dvh text-white">
+      {/* Full-Screen Stadium Backdrop */}
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <Image
+          src={sidebarBg}
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-center opacity-50"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#030b26]/72 via-[#040f34]/78 to-[#02081b]/90" />
+      </div>
+
+      {/* Desktop / Landscape Tablet Sidebar */}
+      <aside className="relative z-20 hidden w-52 shrink-0 lg:block xl:w-60">
         <div className="sticky top-0 h-dvh">{renderSidebarContent()}</div>
       </aside>
 
@@ -710,7 +710,7 @@ export default function DashboardClient() {
       )}
 
       {/* Main Content */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         {/* Sticky Sleek Top Header Bar */}
         <header className="sticky top-0 z-30 border-b border-blue-400/20 bg-[#040f33]/90 px-3.5 py-2.5 backdrop-blur-md sm:px-6 sm:py-3">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">

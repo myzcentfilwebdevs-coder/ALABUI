@@ -82,17 +82,17 @@ export default function ForgotPasswordForm() {
   }
 
   return (
-    <form method="post" onSubmit={onSubmit} noValidate className="space-y-3">
+    <form method="post" onSubmit={onSubmit} noValidate className="space-y-2.5">
       {serverError && <Alert type="error">{serverError}</Alert>}
 
-      <p className="text-xs text-slate-600 sm:text-sm">
+      <p className="text-xs text-slate-600">
         Enter your username or email, verify using your Google Authenticator OTP, and set a new password.
       </p>
 
       <TextField
         label="Username or Email"
         name="username_or_email"
-        icon={<UserIcon className="h-5 w-5" />}
+        icon={<UserIcon className="h-4 w-4 sm:h-5 sm:w-5" />}
         value={usernameOrEmail}
         onChange={(e) => {
           setUsernameOrEmail(e.target.value);
@@ -102,8 +102,8 @@ export default function ForgotPasswordForm() {
         autoComplete="username"
       />
 
-      <div className="space-y-1.5 text-center">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+      <div className="space-y-1 text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 sm:text-xs">
           6-Digit Authenticator OTP
         </p>
         <OtpInput
@@ -117,11 +117,11 @@ export default function ForgotPasswordForm() {
         />
       </div>
 
-      <div className="grid gap-2.5 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5">
         <PasswordField
           label="New Password"
           name="new_password"
-          icon={<LockIcon className="h-5 w-5" />}
+          icon={<LockIcon className="h-4 w-4 sm:h-5 sm:w-5" />}
           value={newPassword}
           onChange={(e) => {
             setNewPassword(e.target.value);
@@ -133,7 +133,8 @@ export default function ForgotPasswordForm() {
         <PasswordField
           label="Confirm Password"
           name="confirm_password"
-          icon={<LockIcon className="h-5 w-5" />}
+          placeholder="Confirm Pass"
+          icon={<LockIcon className="h-4 w-4 sm:h-5 sm:w-5" />}
           value={confirmPassword}
           onChange={(e) => {
             setConfirmPassword(e.target.value);
@@ -144,8 +145,8 @@ export default function ForgotPasswordForm() {
         />
       </div>
 
-      <div className="pt-1">
-        <SubmitButton loading={loading} loadingText="Updating password..." icon={<KeyIcon className="h-5 w-5" />}>
+      <div className="pt-0.5">
+        <SubmitButton loading={loading} loadingText="Updating password..." icon={<KeyIcon className="h-4 w-4 sm:h-5 sm:w-5" />}>
           Reset Password
         </SubmitButton>
       </div>
