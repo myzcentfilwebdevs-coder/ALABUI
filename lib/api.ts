@@ -1387,11 +1387,16 @@ export interface PlayerAttendanceHistoryResponse {
 
 export interface CreatePlayerPayload {
   first_name: string;
+  middle_name?: string;
   last_name: string;
+  birthdate?: string;
   gender: string;
   age_category: string;
   position: string;
   jersey_number: number;
+  parent_user_id?: number;
+  parent_name?: string;
+  relationship?: string;
 }
 
 export interface AllHistoryPlayer {
@@ -1472,7 +1477,7 @@ export async function fetchDailyAttendance(params?: {
       typeof p.attended === "boolean" ? p.attended : status === "Present" || status === "Late";
     const jersey = p.jersey_number !== null && p.jersey_number !== undefined ? Number(p.jersey_number) : null;
     return {
-      player_user_id: Number(p.player_user_id ?? p.user_id ?? p.id ?? 0),
+      player_user_id: Number(p.player_id ?? p.player_user_id ?? p.user_id ?? p.id ?? 0),
       first_name: String(p.first_name ?? ""),
       last_name: String(p.last_name ?? ""),
       jersey_number: jersey !== null && !Number.isNaN(jersey) ? jersey : null,
@@ -1515,6 +1520,7 @@ export async function markSingleDailyAttendance(payload: {
     method: "POST",
     body: {
       ...(payload.date ? { date: payload.date } : {}),
+      player_id: payload.player_user_id,
       player_user_id: payload.player_user_id,
       status: payload.status,
       remarks: payload.remarks ?? "",
@@ -1535,6 +1541,7 @@ export async function markBulkDailyAttendance(payload: {
     body: {
       ...(payload.date ? { date: payload.date } : {}),
       records: payload.records.map((r) => ({
+        player_id: r.player_user_id,
         player_user_id: r.player_user_id,
         status: r.status,
         remarks: r.remarks ?? "",
@@ -1608,7 +1615,7 @@ export async function fetchPlayerAttendanceHistory(
   });
 
   const totalCount = Number(summaryRaw.total ?? records.length) || 0;
-  const resolvedPlayerId = Number(root.player_user_id ?? playerUserId);
+  const resolvedPlayerId = Number(root.player_id ?? root.player_user_id ?? playerUserId);
   const todayStr = normalizeRecordDate(root.today) || getLocalTodayISO();
   const todayStatus = normalizeStatus(root.today_status);
 
@@ -1670,11 +1677,20 @@ export async function createPlayer(payload: CreatePlayerPayload) {
     method: "POST",
     body: {
       first_name: payload.first_name.trim(),
+      ...(payload.middle_name?.trim() ? { middle_name: payload.middle_name.trim() } : {}),
       last_name: payload.last_name.trim(),
+      ...(payload.birthdate?.trim() ? { birthdate: payload.birthdate.trim() } : {}),
       gender: payload.gender,
       age_category: payload.age_category.trim(),
       position: payload.position.trim(),
       jersey_number: Number(payload.jersey_number),
+      ...(payload.parent_user_id && payload.parent_user_id > 0
+        ? { parent_user_id: payload.parent_user_id }
+        : {}),
+      ...(payload.parent_name?.trim() ? { parent_name: payload.parent_name.trim() } : {}),
+      ...(payload.parent_name?.trim() || (payload.parent_user_id && payload.parent_user_id > 0)
+        ? { relationship: (payload.relationship ?? "Guardian").trim() || "Guardian" }
+        : {}),
     },
   });
 }
@@ -1744,7 +1760,7 @@ export async function fetchAllAttendanceHistory(params?: {
         : 0;
 
     return {
-      player_user_id: Number(p.player_user_id ?? p.user_id ?? p.id ?? 0),
+      player_user_id: Number(p.player_id ?? p.player_user_id ?? p.user_id ?? p.id ?? 0),
       first_name: String(p.first_name ?? ""),
       last_name: String(p.last_name ?? ""),
       jersey_number: jersey !== null && !Number.isNaN(jersey) ? jersey : null,
@@ -1846,11 +1862,20 @@ function normalizeLinkedPlayer(raw: Record<string, unknown>): LinkedPlayer {
       : nestedPlayer
   ) as Record<string, unknown>;
 
-  const linkIdRaw = raw.link_id ?? raw.parent_player_id ?? (raw.player_user_id ? raw.id : null);
+  const linkIdRaw =
+    raw.link_id ??
+    raw.parent_player_id ??
+    (raw.player_id || raw.player_user_id ? raw.id : null);
   const linkId = linkIdRaw !== null && linkIdRaw !== undefined ? Number(linkIdRaw) : null;
 
   const playerUserId = Number(
-    raw.player_user_id ?? nestedPlayer.user_id ?? nestedPlayer.id ?? raw.id ?? 0
+    raw.player_id ??
+      raw.player_user_id ??
+      nestedPlayer.player_id ??
+      nestedPlayer.user_id ??
+      nestedPlayer.id ??
+      raw.id ??
+      0
   );
 
   const parentUserIdRaw = raw.parent_user_id ?? null;
@@ -1891,7 +1916,18 @@ function normalizeLinkedPlayer(raw: Record<string, unknown>): LinkedPlayer {
   ).trim();
 
   const ageRaw = raw.age ?? nestedProfile.age ?? nestedPlayer.age ?? null;
-  const ageNum = ageRaw !== null && ageRaw !== undefined && String(ageRaw).trim() !== "" ? Number(ageRaw) : null;
+  let ageNum = ageRaw !== null && ageRaw !== undefined && String(ageRaw).trim() !== "" ? Number(ageRaw) : null;
+  if ((ageNum === null || Number.isNaN(ageNum) || ageNum <= 0)) {
+    const birthRaw = String(raw.birthdate ?? nestedProfile.birthdate ?? nestedPlayer.birthdate ?? "").trim();
+    const bm = /^(\d{4})-(\d{2})-(\d{2})/.exec(birthRaw);
+    if (bm) {
+      const now = new Date();
+      let yrs = now.getFullYear() - Number(bm[1]);
+      const mDiff = now.getMonth() + 1 - Number(bm[2]);
+      if (mDiff < 0 || (mDiff === 0 && now.getDate() < Number(bm[3]))) yrs--;
+      if (yrs > 0 && yrs < 100) ageNum = yrs;
+    }
+  }
 
   const statusStr = String(raw.status ?? nestedProfile.status ?? nestedPlayer.status ?? "").trim();
 
@@ -2032,6 +2068,7 @@ export async function linkParentPlayers(payload: LinkParentPlayersPayload) {
     body: {
       parent_name: payload.parent_name.trim(),
       relationship: payload.relationship.trim(),
+      player_ids: uniqueIds,
       player_user_ids: uniqueIds,
     },
   });
@@ -2263,7 +2300,7 @@ function normalizeTournamentRosterItem(
   const jersey = jerseyRaw !== null && jerseyRaw !== undefined ? Number(jerseyRaw) : null;
 
   const playerUserId = Number(
-    raw.player_user_id ?? nestedPlayer?.user_id ?? nestedPlayer?.id ?? 0
+    raw.player_id ?? raw.player_user_id ?? nestedPlayer?.player_id ?? nestedPlayer?.user_id ?? nestedPlayer?.id ?? 0
   );
 
   return {
@@ -2561,12 +2598,14 @@ export async function addPlayersToTournamentRoster(
   tournamentId: number | string,
   payload: { player_user_ids: number[]; remarks?: string }
 ) {
+  const uniqueIds = Array.from(new Set(payload.player_user_ids)).filter(
+    (id) => Number.isInteger(id) && id > 0
+  );
   return authRequest<Record<string, unknown>>(DASHBOARD_ENDPOINTS.tournamentRoster(tournamentId), {
     method: "POST",
     body: {
-      player_user_ids: Array.from(new Set(payload.player_user_ids)).filter(
-        (id) => Number.isInteger(id) && id > 0
-      ),
+      player_ids: uniqueIds,
+      player_user_ids: uniqueIds,
       remarks: (payload.remarks ?? "").trim(),
     },
   });

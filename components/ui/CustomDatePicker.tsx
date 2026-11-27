@@ -348,28 +348,48 @@ export default function CustomDatePicker({
             </div>
 
             {pickingMonthYear ? (
-              /* Quick Month & Year Selector */
-              <div className="mb-3 grid grid-cols-3 gap-1.5">
-                {MONTH_SHORT.map((label, idx) => {
-                  const active = idx === viewMonth0;
-                  return (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => {
-                        setViewMonth0(idx);
-                        setPickingMonthYear(false);
-                      }}
-                      className={`rounded-lg py-2 text-xs font-bold transition ${
-                        active
-                          ? "border border-sky-200/80 bg-gradient-to-b from-sky-400 via-blue-500 to-blue-600 text-white shadow-[0_0_16px_rgba(56,189,248,0.65)]"
-                          : "border border-blue-400/20 bg-[#051440]/80 text-blue-100 hover:border-sky-400/50 hover:bg-blue-500/30 hover:text-white"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
+              /* Quick Year + Month Selector */
+              <div className="mb-3 space-y-2.5">
+                <div className="sidebar-scroll flex gap-1 overflow-x-auto pb-1">
+                  {Array.from({ length: 26 }, (_, i) => new Date().getFullYear() + 2 - i).map(
+                    (yr) => (
+                      <button
+                        key={yr}
+                        type="button"
+                        onClick={() => setViewYear(yr)}
+                        className={`shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold transition ${
+                          yr === viewYear
+                            ? "border border-sky-200/80 bg-gradient-to-b from-sky-400 to-blue-600 text-white shadow-[0_0_12px_rgba(56,189,248,0.6)]"
+                            : "border border-blue-400/20 bg-[#051440]/80 text-blue-200 hover:border-sky-400/50 hover:text-white"
+                        }`}
+                      >
+                        {yr}
+                      </button>
+                    )
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {MONTH_SHORT.map((label, idx) => {
+                    const active = idx === viewMonth0;
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => {
+                          setViewMonth0(idx);
+                          setPickingMonthYear(false);
+                        }}
+                        className={`rounded-lg py-2 text-xs font-bold transition ${
+                          active
+                            ? "border border-sky-200/80 bg-gradient-to-b from-sky-400 via-blue-500 to-blue-600 text-white shadow-[0_0_16px_rgba(56,189,248,0.65)]"
+                            : "border border-blue-400/20 bg-[#051440]/80 text-blue-100 hover:border-sky-400/50 hover:bg-blue-500/30 hover:text-white"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
               <>
