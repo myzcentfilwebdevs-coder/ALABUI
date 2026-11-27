@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Barlow_Condensed, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -22,6 +22,12 @@ const barlow = Barlow_Condensed({
 export const metadata: Metadata = {
   title: "ALAB Football Club",
   description: "Keep the fire burning — join ALAB Football Club.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

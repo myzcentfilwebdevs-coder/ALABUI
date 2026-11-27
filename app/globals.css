@@ -21,6 +21,26 @@ body {
   overflow-x: clip;
 }
 
+/* Balanced proportional scale for portrait & landscape tablets so cards, typography,
+   and sidebar fit comfortably without looking oversized or cramped */
+@media (min-width: 768px) and (max-width: 1279px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 768px) and (max-height: 760px) {
+  html {
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 768px) and (max-height: 640px) {
+  html {
+    font-size: 12.25px;
+  }
+}
+
 /* Hide browser-native password reveal button (e.g. Microsoft Edge) so only our custom toggle shows */
 input[type="password"]::-ms-reveal,
 input[type="password"]::-ms-clear {
@@ -47,12 +67,10 @@ input[type="password"]::-ms-clear {
 /* Dark stadium dashboard theme */
 .dash-bg {
   background:
-    radial-gradient(ellipse 45% 28% at 22% 0%, rgba(147, 197, 253, 0.28), transparent 65%),
-    radial-gradient(ellipse 45% 28% at 78% 0%, rgba(147, 197, 253, 0.24), transparent 65%),
-    radial-gradient(ellipse 55% 40% at 50% 10%, rgba(37, 99, 235, 0.35), transparent 70%),
-    radial-gradient(ellipse 30% 35% at 100% 24%, rgba(249, 115, 22, 0.32), transparent 65%),
-    radial-gradient(ellipse 28% 32% at 0% 96%, rgba(249, 115, 22, 0.24), transparent 65%),
-    linear-gradient(180deg, #040f33 0%, #05143e 45%, #030b24 100%);
+    radial-gradient(ellipse 45% 28% at 22% 0%, rgba(56, 189, 248, 0.22), transparent 65%),
+    radial-gradient(ellipse 45% 28% at 78% 0%, rgba(59, 130, 246, 0.2), transparent 65%),
+    radial-gradient(ellipse 55% 40% at 50% 10%, rgba(37, 99, 235, 0.28), transparent 70%),
+    linear-gradient(180deg, #030b26 0%, #041038 45%, #02081b 100%);
 }
 
 .dash-card {
@@ -60,6 +78,85 @@ input[type="password"]::-ms-clear {
   border: 1px solid rgba(96, 165, 250, 0.26);
   box-shadow: 0 12px 32px -12px rgba(2, 8, 28, 0.85), inset 0 1px 0 rgba(191, 219, 254, 0.12);
   backdrop-filter: blur(12px);
+}
+
+/* Height-adaptive sidebar so ALL nav items + crest + slogan + logout fit with ZERO scroll
+   even on wide-but-short landscape tablets (e.g. 1280x600 where xl: width triggers) */
+@media (max-height: 760px) {
+  .alab-sidebar-head {
+    padding-top: 0.55rem !important;
+    padding-bottom: 0.4rem !important;
+  }
+  .alab-sidebar-crest {
+    height: 2.6rem !important;
+  }
+  .alab-sidebar-divider {
+    margin-top: 0.4rem !important;
+  }
+  .alab-sidebar-nav {
+    padding-top: 0.2rem !important;
+    padding-bottom: 0.2rem !important;
+    gap: 0.125rem !important;
+  }
+  .alab-sidebar-item {
+    padding-top: 0.38rem !important;
+    padding-bottom: 0.38rem !important;
+    font-size: 0.78rem !important;
+  }
+  .alab-sidebar-foot {
+    padding-top: 0.45rem !important;
+    padding-bottom: 0.45rem !important;
+    gap: 0.35rem !important;
+  }
+  .alab-sidebar-slogan {
+    padding: 0.45rem 0.7rem !important;
+  }
+  .alab-sidebar-ball {
+    height: 2.75rem !important;
+    width: 2.75rem !important;
+  }
+  .alab-sidebar-logout {
+    padding-top: 0.38rem !important;
+    padding-bottom: 0.38rem !important;
+  }
+}
+
+@media (max-height: 640px) {
+  .alab-sidebar-head {
+    padding-top: 0.4rem !important;
+    padding-bottom: 0.3rem !important;
+  }
+  .alab-sidebar-crest {
+    height: 2.15rem !important;
+  }
+  .alab-sidebar-tagline {
+    display: none !important;
+  }
+  .alab-sidebar-divider {
+    margin-top: 0.3rem !important;
+  }
+  .alab-sidebar-item {
+    padding-top: 0.28rem !important;
+    padding-bottom: 0.28rem !important;
+    font-size: 0.75rem !important;
+    line-height: 1.2 !important;
+  }
+  .alab-sidebar-foot {
+    padding-top: 0.35rem !important;
+    padding-bottom: 0.35rem !important;
+    gap: 0.3rem !important;
+  }
+  .alab-sidebar-slogan {
+    padding: 0.35rem 0.65rem !important;
+  }
+  .alab-sidebar-ball {
+    height: 2.3rem !important;
+    width: 2.3rem !important;
+  }
+  .alab-sidebar-logout {
+    padding-top: 0.3rem !important;
+    padding-bottom: 0.3rem !important;
+  }
 }
 
 /* Sleek dark scrollbar for sidebar & scrollable panels */
